@@ -1,0 +1,4 @@
+/.ipynb_checkpoints
+/data
+/encoder_weights.pt
+/__pycache__
