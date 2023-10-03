@@ -23,6 +23,7 @@ class HumanModel(nn.Module):
 
         :param mu: mean of distribution
         :param logvar: std of distribution - actually log version due to stability reason
+            see https://discuss.pytorch.org/t/vae-example-reparametrize/35843/2 for reason why log and 0.5
         :return: a sample from distribution
         """
         if self.training:
