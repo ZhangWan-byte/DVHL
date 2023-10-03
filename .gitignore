@@ -2,3 +2,4 @@
 /data
 /encoder_weights.pt
 /__pycache__
+*.pyc
