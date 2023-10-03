@@ -1,7 +1,7 @@
 from .ResNet import *
 
 class HumanModel(nn.Module):
-    def __init__(self, cnn_type='resnet18'):
+    def __init__(self, cnn_type='resnet18', metric_num=16):
         super(HumanModel, self).__init__()
         
         # cnn tower
@@ -14,9 +14,18 @@ class HumanModel(nn.Module):
             exit()
 
         # preference tower
-        self.mu = nn.Parameter(torch.zeros((16,1)))
-        self.logvar = nn.Parameter(torch.ones((16,1)))
-        self.user_weights = nn.Parameter(torch.rand((16,1)))
+        self.mu = nn.Parameter(torch.zeros((metric_num,1)))
+        self.logvar = nn.Parameter(torch.ones((metric_num,1)))
+        self.user_weights = nn.Parameter(torch.rand((metric_num,1)))
+
+    def calc_metrics(self, x):
+        """calculate metric values
+
+        :param x: input I_hat
+        """
+
+        pass
+
     
     def reparameterise(self, mu, logvar):
         """sampling from gaussian distribution with mu and var
@@ -26,6 +35,7 @@ class HumanModel(nn.Module):
             see https://discuss.pytorch.org/t/vae-example-reparametrize/35843/2 for reason why log and 0.5
         :return: a sample from distribution
         """
+        
         if self.training:
             std = torch.exp(0.5 * logvar) # logvar.mul(0.5).exp_()
             eps = torch.randn_like(std) # std.data.new(std.size()).normal_()
@@ -39,9 +49,9 @@ class HumanModel(nn.Module):
         visual_feature = self.cnn(x)
 
         # preference tower
-        m = self.calc_metric(x)
-        d = self.reparameterise(self.mu, self.logvar)
-        w = F.sigmoid(self.user_weights)
+        m = self.calc_metric(x)                             # metric values
+        d = self.reparameterise(self.mu, self.logvar)       # random d for uncertainty
+        w = F.sigmoid(self.user_weights)                    # quasi-binary w for personal preference over metrics
         user_preference = m * d * w
 
         # prediction heads
