@@ -18,6 +18,35 @@ class HumanModel(nn.Module):
         self.logvar = nn.Parameter(torch.log(torch.ones((metric_num,1))))
         self.user_weights = nn.Parameter(torch.rand((metric_num,1)))
 
+        # prediction heads
+        # Q1: 
+        self.head1 = nn.Sequential(
+            nn.Linear(100, 100), 
+            nn.ReLU(), 
+            nn.Linear(100, 100), 
+            nn.ReLU(), 
+            nn.Linear(100, 1), 
+            nn.Sigmoid()
+        )
+        # Q2: 
+        self.head2 = nn.Sequential(
+            nn.Linear(100, 100), 
+            nn.ReLU(), 
+            nn.Linear(100, 100), 
+            nn.ReLU(), 
+            nn.Linear(100, 1), 
+            nn.Sigmoid()
+        )
+        # Q3: 
+        self.head3 = nn.Sequential(
+            nn.Linear(100, 100), 
+            nn.ReLU(), 
+            nn.Linear(100, 100), 
+            nn.ReLU(), 
+            nn.Linear(100, 1), 
+            nn.Sigmoid()
+        )
+
     def calc_metrics(self, x):
         """calculate metric values
 
@@ -55,9 +84,9 @@ class HumanModel(nn.Module):
         user_preference = m * d * w
 
         # prediction heads
-        q1 = self.q1(visual_feature, user_preference)
-        q2 = self.q1(visual_feature, user_preference)
-        q3 = self.q1(visual_feature, user_preference)
+        q1 = self.head1(visual_feature, user_preference)
+        q2 = self.head2(visual_feature, user_preference)
+        q3 = self.head3(visual_feature, user_preference)
         # ...
 
         return q1, q2, q3
