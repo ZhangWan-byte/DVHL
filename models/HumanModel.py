@@ -15,7 +15,7 @@ class HumanModel(nn.Module):
 
         # preference tower
         self.mu = nn.Parameter(torch.zeros((metric_num,1)))
-        self.logvar = nn.Parameter(torch.ones((metric_num,1)))
+        self.logvar = nn.Parameter(torch.log(torch.ones((metric_num,1))))
         self.user_weights = nn.Parameter(torch.rand((metric_num,1)))
 
     def calc_metrics(self, x):
