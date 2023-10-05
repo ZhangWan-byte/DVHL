@@ -1,6 +1,9 @@
 from .ResNet import *
 
-from pyscagnostics import scagnostics
+from metrics import scagnostics
+from metrics import ABW, CAL, DSC, HM, NH, SC, CC
+from metrics import Stress, CCA, NLM
+from metrics import LCMC, Trustworthiness, NeRV, AUClogRNX
 
 class HumanModel(nn.Module):
     def __init__(self, cnn_type='resnet18', metric_num=16):
@@ -56,7 +59,7 @@ class HumanModel(nn.Module):
         """
 
         # scagnostics
-        measures, _ = scagnostics(z_umap[:, 0], z_umap[:, 1])
+        all_scags = scagnostics.compute(z_umap[:, 0], z_umap[:, 1])
 
         # 
 
