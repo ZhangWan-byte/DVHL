@@ -52,16 +52,52 @@ class HumanModel(nn.Module):
             nn.Sigmoid()
         )
 
-    def calc_metrics(self, z):
+    def calc_metrics(self, z, labels, x):
         """calculate metric values
 
-        :param z: dimensionality reduction result z
+        :param z: (N_low, 2) - dimensionality reduction result z
+        :param labels: (N_low, 1) - class labels for z
+        :param x: (N_high, 2) - original high dimensional data
         """
 
         # scagnostics
         all_scags = scagnostics.compute(z_umap[:, 0], z_umap[:, 1])
 
-        # 
+        # cluster separability
+        abw_score = ABW.compute(visu=z, labels=labels)
+        cal_score = CAL.compute(visu=z, labels=labels)
+        dsc_score = DSC.compute(visu=z, labels=labels)
+        hm_score = HM.compute(visu=z, labels=labels)
+        nh_score = NH.compute(df=pd.Dataframe(z), k=5)
+        sc_score = SC.compute(visu=z, labels=labels)
+
+        # correlation btw distances
+        cc_score = CC.compute(data=x, visu=z)
+
+        # stress
+        nms_score = Stress.compute(data=x, visu=z)
+        cca_score = CCA.compute(data=x, visu=z)
+        nlm_score = NLM.compute(data=x, visu=z)
+
+        # small neighbourhoods
+        lcmc_score = LCMC.compute(dataset=x, visu=z)
+        TC_score = Trustworthiness.compute(dataset=x, visu=z)
+        nerv_score = NeRV.compute(data=x, visu=z, l=0.5) 
+
+        # all neighbourhoods
+        auclogrnx_score = AUClogRNX.compute(data=x, visu=z)
+
+        # returned metric tensor
+        result_tensor = torch.tensor([
+            list(all_scags.values()), 
+            bw_score, cal_score, dsc_score, hm_score, nh_score, sc_score, 
+            cc_score, 
+            nms_score, cca_score, nlm_score, 
+            lcmc_score, TC_score, nerv_score, 
+            auclogrnx_score
+        ])
+
+        return result_tensor
 
     
     def reparameterise(self, mu, logvar):
@@ -80,13 +116,21 @@ class HumanModel(nn.Module):
         else:
             return mu
 
-    def forward(self, I_hat, z):
+    def forward(self, I_hat, z, labels, x):
+        """predicting human feedbacks
+
+        :param I_hat: approximate scatterplot of z
+        :param z: dimensionality reduction result
+        :param labels: class labels for z
+        :param x: originial high dimension data
+        :return: feedbacks
+        """
 
         # cnn tower
         visual_feature = self.cnn(I_hat)
 
         # preference tower
-        m = self.calc_metric(x)                             # metric values
+        m = self.calc_metric(z=z, labels=labels, x=x)       # metric values
         d = self.reparameterise(self.mu, self.logvar)       # random d for uncertainty
         w = F.sigmoid(self.user_weights)                    # quasi-binary w for personal preference over metrics
         user_preference = m * d * w

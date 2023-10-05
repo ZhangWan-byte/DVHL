@@ -9,11 +9,13 @@ from sklearn.neighbors import kneighbors_graph
 
 
 def get_knntree(df, n=1):
-	X = df.iloc[:, [0, 1]]
-	A = kneighbors_graph(X, n + 1, mode = "distance", include_self = True)
-	graph = nx.from_numpy_matrix(A.toarray(), create_using = nx.DiGraph)
-	# nx.draw(graph, pointIDXY, node_size=25)
-	return graph
+    X = df.iloc[:, [0, 1]]
+    A = kneighbors_graph(X, n + 1, mode = "distance", include_self = True)
+    graph = nx.from_numpy_array(A.toarray())
+    # graph = nx.from_numpy_matrix(A.toarray(), create_using = nx.DiGraph)
+    # nx.draw(graph, pointIDXY, node_size=25)
+	
+    return graph
 
 
 def compute(df, k=5):
