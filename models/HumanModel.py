@@ -1,5 +1,7 @@
 from .ResNet import *
 
+from pyscagnostics import scagnostics
+
 class HumanModel(nn.Module):
     def __init__(self, cnn_type='resnet18', metric_num=16):
         super(HumanModel, self).__init__()
@@ -47,13 +49,16 @@ class HumanModel(nn.Module):
             nn.Sigmoid()
         )
 
-    def calc_metrics(self, x):
+    def calc_metrics(self, z):
         """calculate metric values
 
-        :param x: input I_hat
+        :param z: dimensionality reduction result z
         """
 
-        pass
+        # scagnostics
+        measures, _ = scagnostics(z_umap[:, 0], z_umap[:, 1])
+
+        # 
 
     
     def reparameterise(self, mu, logvar):
@@ -72,10 +77,10 @@ class HumanModel(nn.Module):
         else:
             return mu
 
-    def forward(self, x):
+    def forward(self, I_hat, z):
 
         # cnn tower
-        visual_feature = self.cnn(x)
+        visual_feature = self.cnn(I_hat)
 
         # preference tower
         m = self.calc_metric(x)                             # metric values
