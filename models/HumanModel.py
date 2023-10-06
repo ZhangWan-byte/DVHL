@@ -6,7 +6,7 @@ from metrics import Stress, CCA, NLM
 from metrics import LCMC, Trustworthiness, NeRV, AUClogRNX
 
 class HumanModel(nn.Module):
-    def __init__(self, cnn_type='resnet18', metric_num=16):
+    def __init__(self, cnn_type='resnet18', metric_num=9):
         super(HumanModel, self).__init__()
         
         # cnn tower
@@ -26,7 +26,7 @@ class HumanModel(nn.Module):
         # prediction heads
         # Q1: 
         self.head1 = nn.Sequential(
-            nn.Linear(100, 100), 
+            nn.Linear(100+metric_num, 100), 
             nn.ReLU(), 
             nn.Linear(100, 100), 
             nn.ReLU(), 
@@ -35,7 +35,7 @@ class HumanModel(nn.Module):
         )
         # Q2: 
         self.head2 = nn.Sequential(
-            nn.Linear(100, 100), 
+            nn.Linear(100+metric_num, 100), 
             nn.ReLU(), 
             nn.Linear(100, 100), 
             nn.ReLU(), 
@@ -44,7 +44,7 @@ class HumanModel(nn.Module):
         )
         # Q3: 
         self.head3 = nn.Sequential(
-            nn.Linear(100, 100), 
+            nn.Linear(100+metric_num, 100), 
             nn.ReLU(), 
             nn.Linear(100, 100), 
             nn.ReLU(), 
@@ -63,39 +63,41 @@ class HumanModel(nn.Module):
         # scagnostics
         all_scags = scagnostics.compute(z_umap[:, 0], z_umap[:, 1])
 
-        # cluster separability
-        abw_score = ABW.compute(visu=z, labels=labels)
-        cal_score = CAL.compute(visu=z, labels=labels)
-        dsc_score = DSC.compute(visu=z, labels=labels)
-        hm_score = HM.compute(visu=z, labels=labels)
-        nh_score = NH.compute(df=pd.Dataframe(z), k=5)
-        sc_score = SC.compute(visu=z, labels=labels)
+        # # cluster separability
+        # abw_score = ABW.compute(visu=z, labels=labels)
+        # cal_score = CAL.compute(visu=z, labels=labels)
+        # dsc_score = DSC.compute(visu=z, labels=labels)
+        # hm_score = HM.compute(visu=z, labels=labels)
+        # nh_score = NH.compute(df=pd.Dataframe(z), k=5)
+        # sc_score = SC.compute(visu=z, labels=labels)
 
-        # correlation btw distances
-        cc_score = CC.compute(data=x, visu=z)
+        # # correlation btw distances
+        # cc_score = CC.compute(data=x, visu=z)
 
-        # stress
-        nms_score = Stress.compute(data=x, visu=z)
-        cca_score = CCA.compute(data=x, visu=z)
-        nlm_score = NLM.compute(data=x, visu=z)
+        # # stress
+        # nms_score = Stress.compute(data=x, visu=z)
+        # cca_score = CCA.compute(data=x, visu=z)
+        # nlm_score = NLM.compute(data=x, visu=z)
 
-        # small neighbourhoods
-        lcmc_score = LCMC.compute(dataset=x, visu=z)
-        TC_score = Trustworthiness.compute(dataset=x, visu=z)
-        nerv_score = NeRV.compute(data=x, visu=z, l=0.5) 
+        # # small neighbourhoods
+        # lcmc_score = LCMC.compute(dataset=x, visu=z)
+        # TC_score = Trustworthiness.compute(dataset=x, visu=z)
+        # nerv_score = NeRV.compute(data=x, visu=z, l=0.5) 
 
-        # all neighbourhoods
-        auclogrnx_score = AUClogRNX.compute(data=x, visu=z)
+        # # all neighbourhoods
+        # auclogrnx_score = AUClogRNX.compute(data=x, visu=z)
 
-        # returned metric tensor
-        result_tensor = torch.tensor([
-            list(all_scags.values()), 
-            bw_score, cal_score, dsc_score, hm_score, nh_score, sc_score, 
-            cc_score, 
-            nms_score, cca_score, nlm_score, 
-            lcmc_score, TC_score, nerv_score, 
-            auclogrnx_score
-        ])
+        # # returned metric tensor
+        # result_tensor = torch.tensor([
+        #     list(all_scags.values()), 
+        #     bw_score, cal_score, dsc_score, hm_score, nh_score, sc_score, 
+        #     cc_score, 
+        #     nms_score, cca_score, nlm_score, 
+        #     lcmc_score, TC_score, nerv_score, 
+        #     auclogrnx_score
+        # ])
+
+        result_tensor = torch.tensor([list(all_scags.values())])
 
         return result_tensor
 
@@ -110,9 +112,9 @@ class HumanModel(nn.Module):
         """
         
         if self.training:
-            std = torch.exp(0.5 * logvar) # logvar.mul(0.5).exp_()
-            eps = torch.randn_like(std) # std.data.new(std.size()).normal_()
-            return eps * std + mu # eps.mul(std).add_(mu)
+            std = torch.exp(0.5 * logvar)                   # logvar.mul(0.5).exp_()
+            eps = torch.randn_like(std)                     # std.data.new(std.size()).normal_()
+            return eps * std + mu                           # eps.mul(std).add_(mu)
         else:
             return mu
 
@@ -127,18 +129,21 @@ class HumanModel(nn.Module):
         """
 
         # cnn tower
-        visual_feature = self.cnn(I_hat)
+        visual_feature = self.cnn(I_hat)                    # feature for visual perception
 
         # preference tower
         m = self.calc_metric(z=z, labels=labels, x=x)       # metric values
         d = self.reparameterise(self.mu, self.logvar)       # random d for uncertainty
         w = F.sigmoid(self.user_weights)                    # quasi-binary w for personal preference over metrics
-        user_preference = m * d * w
+        user_preference = self.pref_mlp(m * d * w)          # feature for user preference
+
+        # feature fusion
+        feats = self.fusion(visual_feature, user_preference)
 
         # prediction heads
-        q1 = self.head1(visual_feature, user_preference)
-        q2 = self.head2(visual_feature, user_preference)
-        q3 = self.head3(visual_feature, user_preference)
+        q1 = self.head1(feats)
+        q2 = self.head2(feats)
+        q3 = self.head3(feats)
         # ...
 
         return q1, q2, q3
