@@ -1,3 +1,4 @@
+import os
 import time
 import copy
 import json
@@ -25,6 +26,7 @@ from models import *
 from utils import *
 from datasets import *
 
+from train_DR import train_DR
 
 
 if __name__=='__main__':
@@ -56,11 +58,11 @@ if __name__=='__main__':
 
 
     # create saving directory
-    current_time = time.strftime('%m%d%H%M%S', time.localtime())
+    current_time = time.strftime('%y%m%d%H%M%S', time.localtime())
     result_path = "./results/{}".format(current_time)
     os.makedirs(result_path)
     print("saving dir: {}".format(result_path))
-    with open(result_path, 'w') as f:
+    with open(os.path.join(result_path, "args.json"), 'w') as f:
         json.dump(args.__dict__, f, indent=4)
 
 
@@ -92,7 +94,7 @@ if __name__=='__main__':
         criterion_DR = UMAPLoss(
             device=args.device, 
             min_dist=args.min_dist, 
-            batch_size=args.batch_size, 
+            batch_size=args.batch_size_DR, 
             negative_sample_rate=args.negative_sample_rate, 
             edge_weight=None, 
             repulsion_strength=args.repulsion_strength
@@ -114,9 +116,9 @@ if __name__=='__main__':
 
 
     # optimisation
-    optimizer_DR = torch.optim.Adam(model.parameters(), lr=1e-3)
+    optimizer_DR = torch.optim.Adam(model.MM_I.parameters(), lr=1e-3)
     # scheduler_I = ...
-    optimizer_Human = torch.optim.Adam(model.parameters(), lr=1e-3)
+    optimizer_Human = torch.optim.Adam(model.MM_II.parameters(), lr=1e-3)
     # scheduler_II = ...
 
 
@@ -127,9 +129,9 @@ if __name__=='__main__':
         freeze=(True, False), 
         device=torch.device(args.device)
     )
-    # train_Human(model, criterion_Human, optimizer_Human, epochs=args.epochs_Human)
+    train_Human(model, criterion_Human, optimizer_Human, epochs=args.epochs_Human)
 
-    os.makedirs(os.path.join(result_path, "phase1"))
+    os.makedirs(os.path.join(result_path, "/phase1/"))
     print("Go to {} and give feedback.".format(os.path.join(result_path, "phase1")))
     input("Press Enter to continue...")
 

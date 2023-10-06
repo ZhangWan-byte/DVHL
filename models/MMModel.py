@@ -4,11 +4,12 @@ import torch.nn.functional as F
 
 from .DRModel import Encoder
 from .HumanModel import HumanModel
+from .VIModules import VisualImitation
 
 
 class MMModel(nn.Module):
     def __init__(self, MM_I_wPATH, MM_II_wPATH, freeze=(False, False), device=torch.device('cuda')):
-        super(MM, self).__init__()
+        super(MMModel, self).__init__()
 
         # configure MM_I and MM_II
         self.MM_I = Encoder(output_dim=2)
