@@ -2,11 +2,11 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .MM_I import Encoder
+from .DRModel import Encoder
 from .HumanModel import HumanModel
 
 
-class MM(nn.Module):
+class MMModel(nn.Module):
     def __init__(self, MM_I_wPATH, MM_II_wPATH, freeze=(False, False), device=torch.device('cuda')):
         super(MM, self).__init__()
 
@@ -18,11 +18,11 @@ class MM(nn.Module):
             self.init_weights(MM_I_wPATH, MM_II_wPATH)
 
         if freeze[0]==True:
-            # freeze MM_I
+            # freeze MM_I - DR model
             self.MM_I.requires_grad_(False)
             self.MM_I.eval()
         if freeze[1]==True:
-            # freeze MM_II
+            # freeze MM_II - Human model
             self.MM_II.requires_grad_(False)
             self.MM_II.eval()
 
