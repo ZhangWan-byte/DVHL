@@ -21,11 +21,12 @@ def train_epoch_DR(model, criterion, optimizer, train_dataset, test_dataset, epo
         param.requires_grad = False
 
     train_losses = []
+    eval_losses = []
 
     for epoch in range(epochs):
 
         # train
-        train_loss = 0.
+        train_loss = []
         
         for batch_to, batch_from, batch_index_to, batch_index_from, labels in tqdm(train_dataset.get_batches(), total=total_train):
         
@@ -36,45 +37,45 @@ def train_epoch_DR(model, criterion, optimizer, train_dataset, test_dataset, epo
         
             embedding_to, answers = model(batch_to, y_to)
             embedding_from, answers = model(batch_from, y_from)
-            print(embedding_to.shape, len(answers))
+
             loss = criterion(embedding_to, embedding_from)
         
-            train_loss += loss.item()
+            train_loss.append(loss.item())
         
             loss.backward()
         
             optimizer.step()
 
-        train_losses.append(train_loss.item())
+        train_losses.append(np.mean(train_loss))
 
         print('epoch: {}, loss: {}'.format(epoch, train_loss))
 
         # evaluate
-        eval_loss = 0.
+        eval_loss = []
         
         for batch_to, batch_from, batch_index_to, batch_index_from, labels in tqdm(test_dataset.get_batches(), total=total_test):
         
-            y_to = torch.tensor(labels[batch_index_to]).to(torch.device(device))
-            y_from = torch.tensor(labels[batch_index_from]).to(torch.device(device))
+            y_to = labels[batch_index_to].to(torch.device(device))
+            y_from = labels[batch_index_from].to(torch.device(device))
 
             optimizer.zero_grad()
         
-            embedding_to, _ = model(batch_to, y_to)
-            embedding_from, _ = model(batch_from, y_from)
+            embedding_to, answers = model(batch_to, y_to)
+            embedding_from, answers = model(batch_from, y_from)
         
             loss = criterion(embedding_to, embedding_from)
         
-            train_loss += loss.item()
+            eval_loss.append(loss.item())
         
             loss.backward()
         
             optimizer.step()
 
-        train_losses.append(train_loss.item())
+        eval_losses.append(np.mean(eval_loss))
 
-        print('epoch: {}, loss: {}'.format(epoch, train_loss))
+        print('epoch: {}, train_loss: {}, eval_loss'.format(epoch, train_loss, eval_loss))
 
-    return model, train_losses
+    return model, train_losses, eval_losses
 
 
 def train_epoch_Human(model, criterion, optimizer, epochs=20):
