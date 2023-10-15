@@ -13,7 +13,7 @@ def compute(x, y):
     r_source = robjects.r['source']
     # r_source(os.path.join(path, '../../DRflow/metrics/get_scag.r'))
     r_source(os.path.join('./metrics/get_scag.r'))
-    print(os.path.join('./metrics/get_scag.r'))
+    # print(os.path.join('./metrics/get_scag.r'))
     r_getname = robjects.globalenv['scags']
     scags = r_getname(robjects.FloatVector(x), robjects.FloatVector(y))
     all_scags['outlying'] = scags[0]

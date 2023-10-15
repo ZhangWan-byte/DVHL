@@ -2,11 +2,16 @@
 import torch
 import numpy as np
 
+import torchvision as tv
+import torchvision.transforms as transforms
+from torch.autograd import Variable
+from torchvision.utils import save_image
+
 from models import *
 
 class UMAPDataset:
 
-    def __init__(self, data, epochs_per_sample, head, tail, weight, device='cpu', batch_size=1000):
+    def __init__(self, data, labels, epochs_per_sample, head, tail, weight, device='cpu', batch_size=1000):
 
         """
         create dataset for iteration on graph edges
@@ -15,6 +20,7 @@ class UMAPDataset:
         self.weigh = weight
         self.batch_size = batch_size
         self.data = data
+        self.labels = labels
         self.device = device
 
         self.edges_to_exp, self.edges_from_exp = (
@@ -34,13 +40,11 @@ class UMAPDataset:
             rand_index = np.random.randint(0, len(self.edges_to_exp) - 1, size=self.batch_size)
             batch_index_to = self.edges_to_exp[rand_index]
             batch_index_from = self.edges_from_exp[rand_index]
-            if self.device == 'cuda':
-                batch_to = torch.Tensor(self.data[batch_index_to]).cuda()
-                batch_from = torch.Tensor(self.data[batch_index_from]).cuda()
-            else:
-                batch_to = torch.Tensor(self.data[batch_index_to])
-                batch_from = torch.Tensor(self.data[batch_index_from])
-            yield (batch_to, batch_from)
+
+            batch_to = torch.Tensor(self.data[batch_index_to]).to(self.device)
+            batch_from = torch.Tensor(self.data[batch_index_from]).to(self.device)
+            
+            yield (batch_to, batch_from, batch_index_to, batch_index_from, self.labels)
 
 
 def get_dataset(args, data='MNIST', DR='UMAP'):
@@ -53,13 +57,13 @@ def get_dataset(args, data='MNIST', DR='UMAP'):
 
         X_train = [i[0].unsqueeze(0) for i in trainset]
         X_train = torch.vstack(X_train)
-        y_train = [i[1] for i in trainset]
+        y_train = torch.tensor([i[1] for i in trainset])
         print("X_train.shape: {}".format(X_train.shape))        # X_train.shape: torch.Size([60000, 1, 28, 28])
 
         X_test = [i[0].unsqueeze(0) for i in testset]
         X_test = torch.vstack(X_test)
-        y_test = [i[1] for i in testset]
-        print("X_test.shape: {}".format(X_test.shape))          # X_test.shape: torch.Size([60000, 1, 28, 28])
+        y_test = torch.tensor([i[1] for i in testset])
+        print("X_test.shape: {}".format(X_test.shape))          # X_test.shape: torch.Size([10000, 1, 28, 28])
 
     if DR=='UMAP':
         # dataset preparation
@@ -72,6 +76,7 @@ def get_dataset(args, data='MNIST', DR='UMAP'):
         train_epochs_per_sample, train_head, train_tail, train_weight = train_graph_constructor(X_train)
         train_dataset = UMAPDataset(
             X_train, 
+            y_train, 
             train_epochs_per_sample, 
             train_head, 
             train_tail, 
@@ -89,6 +94,7 @@ def get_dataset(args, data='MNIST', DR='UMAP'):
         test_epochs_per_sample, test_head, test_tail, test_weight = test_graph_constructor(X_test)
         test_dataset = UMAPDataset(
             X_test, 
+            y_test, 
             test_epochs_per_sample, 
             test_head, 
             test_tail, 

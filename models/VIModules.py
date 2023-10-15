@@ -111,12 +111,15 @@ class VisualImitation(nn.Module):
         return I_hat_single
 
 
-    def forward(self, z):
+    def forward(self, z, labels):
         """calculate I_hat
 
-        :param z: [N, 3] - coordinates and data class
+        :param z: [N, 2] - coordinates
+        :param labels: [N, 1] - data class
         """
         
+        z = torch.hstack([z, labels.view(-1,1)])
+
         I_hat_single = self.get_I_hat_single(z)
         # I_hat_single.register_hook(save_grad('I_hat_single'))
         

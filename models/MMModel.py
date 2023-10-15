@@ -13,10 +13,13 @@ class MMModel(nn.Module):
 
         # configure MM_I and MM_II
         self.MM_I = Encoder(output_dim=2)
-        self.MM_II = HumanModel(cnn_layers=cnn_layers, metric_num=16)
+        self.MM_II = HumanModel(cnn_layers=cnn_layers, metric_num=9, device=device)
 
         if MM_I_wPATH != None or MM_II_wPATH != None:
             self.init_weights(MM_I_wPATH, MM_II_wPATH)
+
+        self.MM_I.to(device)
+        self.MM_II.to(device)
 
         if freeze[0]==True:
             # freeze MM_I - DR model
@@ -38,11 +41,13 @@ class MMModel(nn.Module):
             self.MM_II.load_state_dict(torch.load(MM_II_wPATH))
 
 
-    def forward(self, x, labels):
-        
+    def forward(self, x, labels=None):
+               
         z = self.MM_I(x)
+         
+        I_hat = self.VI(z=z, labels=labels)
 
-        I_hat = self.VI(z)
+        I_hat = I_hat.permute(2,1,0).unsqueeze(0)
 
         answers = self.MM_II(I_hat=I_hat, z=z, labels=labels, x=x)
 

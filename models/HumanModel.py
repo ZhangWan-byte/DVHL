@@ -47,10 +47,11 @@ class AttnFusion(nn.Module):
 
 
 class HumanModel(nn.Module):
-    def __init__(self, cnn_layers=[2,2,2,2], metric_num=9, hidden_dim=100):
+    def __init__(self, cnn_layers=[2,2,2,2], metric_num=9, hidden_dim=100, device=torch.device('cuda')):
         super(HumanModel, self).__init__()
         
         self.hidden_dim = hidden_dim
+        self.device = device
 
         # cnn tower
         self.cnn = ResNet(BasicBlock, cnn_layers)
@@ -137,7 +138,7 @@ class HumanModel(nn.Module):
         #     auclogrnx_score
         # ])
 
-        result_tensor = torch.tensor([list(all_scags.values())]).view(1,-1)
+        result_tensor = torch.tensor([list(all_scags.values())]).view(1,-1).to(self.device)
 
         return result_tensor
 
