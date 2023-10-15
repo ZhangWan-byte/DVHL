@@ -2,6 +2,7 @@
 import torch
 import numpy as np
 
+from models import *
 
 class UMAPDataset:
 

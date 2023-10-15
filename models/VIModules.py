@@ -125,3 +125,10 @@ class VisualImitation(nn.Module):
         return I_hat.float()
 
 
+def get_Ihat(Z):
+    mat = np.zeros((1000,1000))
+    for i in range(len(Z)):
+        xx = min(int(np.floor(Z[i,0]*1000)), 999)
+        yy = min(int(np.floor(Z[i,1]*1000)), 999)
+        mat[xx,yy] = Z[i, 2]
+    return mat

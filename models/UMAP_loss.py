@@ -98,6 +98,7 @@ class ConstructUMAPGraph:
         )
 
         graph, epochs_per_sample, head, tail, weight, n_vertices = self.get_graph_elements(umap_graph, None)
+        
         return epochs_per_sample, head, tail, weight
 
 

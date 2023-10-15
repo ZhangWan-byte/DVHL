@@ -5,10 +5,53 @@ from metrics import ABW, CAL, DSC, HM, NH, SC, CC
 from metrics import Stress, CCA, NLM
 from metrics import LCMC, Trustworthiness, NeRV, AUClogRNX
 
+
+class AttnFusion(nn.Module):
+    def __init__(self, visual_size=100, metric_size=9, hidden_dim=100):
+        super(AttnFusion, self).__init__()
+
+        self.hidden_dim = hidden_dim
+        self.proj_Q = nn.Linear(metric_size, hidden_dim)
+        self.proj_K = nn.Linear(visual_size, hidden_dim)
+        self.proj_V = nn.Linear(visual_size, hidden_dim)
+
+    def compute_attention(self, Q, K, V):
+        """dot-product attention
+
+        :param Q: query
+        :param K: key
+        :param V: value
+        :return: weighted sum
+        """
+        attention_scores = F.softmax(torch.matmul(Q, K.t()), dim=-1)
+        weighted_sum = torch.matmul(attention_scores, V)
+
+        return weighted_sum
+
+    def forward(self, visual_feature, user_preference):
+        """attention and flatten
+
+        :param user_preference: (1, 9)
+        :param visual_feature: (1, 100)
+        """
+
+        Q = self.proj_Q(user_preference)
+        K = self.proj_K(visual_feature)
+        V = self.proj_V(visual_feature)
+
+        # (B, 100, 100)
+        fusion_attn = self.compute_attention(Q, K, V).view(1,-1)
+
+        return fusion_attn
+
+
+
 class HumanModel(nn.Module):
-    def __init__(self, cnn_layers=[2,2,2,2], metric_num=9):
+    def __init__(self, cnn_layers=[2,2,2,2], metric_num=9, hidden_dim=100):
         super(HumanModel, self).__init__()
         
+        self.hidden_dim = hidden_dim
+
         # cnn tower
         self.cnn = ResNet(BasicBlock, cnn_layers)
 
@@ -19,38 +62,33 @@ class HumanModel(nn.Module):
         self.pref_mlp = nn.Sequential(
             nn.Linear(metric_num, metric_num), 
             nn.ReLU(), 
-            # TODO
+            nn.Linear(metric_num, metric_num), 
+            nn.ReLU()
         )
 
         # fusion layer
-        # TODO
+        self.fusion = AttnFusion(visual_size=100, metric_size=metric_num, hidden_dim=hidden_dim)
 
         # prediction heads
         # Q1: 
         self.head1 = nn.Sequential(
-            nn.Linear(100+metric_num, 100), 
+            nn.Linear(self.hidden_dim, self.hidden_dim), 
             nn.ReLU(), 
-            nn.Linear(100, 100), 
-            nn.ReLU(), 
-            nn.Linear(100, 1), 
+            nn.Linear(self.hidden_dim, 1), 
             nn.Sigmoid()
         )
         # Q2: 
         self.head2 = nn.Sequential(
-            nn.Linear(100+metric_num, 100), 
+            nn.Linear(self.hidden_dim, self.hidden_dim), 
             nn.ReLU(), 
-            nn.Linear(100, 100), 
-            nn.ReLU(), 
-            nn.Linear(100, 1), 
+            nn.Linear(self.hidden_dim, 1), 
             nn.Sigmoid()
         )
         # Q3: 
         self.head3 = nn.Sequential(
-            nn.Linear(100+metric_num, 100), 
+            nn.Linear(self.hidden_dim, self.hidden_dim), 
             nn.ReLU(), 
-            nn.Linear(100, 100), 
-            nn.ReLU(), 
-            nn.Linear(100, 1), 
+            nn.Linear(self.hidden_dim, 1), 
             nn.Sigmoid()
         )
 
@@ -99,7 +137,7 @@ class HumanModel(nn.Module):
         #     auclogrnx_score
         # ])
 
-        result_tensor = torch.tensor([list(all_scags.values())])
+        result_tensor = torch.tensor([list(all_scags.values())]).view(1,-1)
 
         return result_tensor
 
@@ -131,16 +169,17 @@ class HumanModel(nn.Module):
         """
 
         # cnn tower
-        visual_feature = self.cnn(I_hat)                    # feature for visual perception
+        visual_feature = self.cnn(I_hat)                                    # feature for visual perception
 
         # preference tower
-        m = self.calc_metrics(z=z, labels=labels, x=x)       # metric values
-        d = self.reparameterise(self.mu, self.logvar)       # random d for uncertainty
-        w = F.sigmoid(self.user_weights)                    # quasi-binary w for personal preference over metrics
-        user_preference = self.pref_mlp(m * d * w)          # feature for user preference
+        m = self.calc_metrics(z=z, labels=labels, x=x).view(1,-1)           # metric values
+        d = self.reparameterise(self.mu, self.logvar).view(1,-1)            # random d for uncertainty
+        w = F.sigmoid(self.user_weights).view(1,-1)                         # quasi-binary w for personal preference over metrics
+        prod = m * d * w
+        user_preference = self.pref_mlp(prod)                               # feature for user preference
 
         # feature fusion
-        feats = self.fusion(visual_feature, user_preference)
+        feats = self.fusion(user_preference=user_preference, visual_feature=visual_feature)
 
         # prediction heads
         q1 = self.head1(feats)

@@ -19,20 +19,20 @@ def train_Human(model, criterion, optimizer, epochs=20):
 
         train_loss = 0.
         
-        # for batch_to, batch_from in tqdm(dataset.get_batches()):
+        for batch_to, batch_from in tqdm(dataset.get_batches()):
         
-        #     optimizer.zero_grad()
+            optimizer.zero_grad()
         
-        #     embedding_to = model(batch_to)
-        #     embedding_from = model(batch_from)
+            embedding_to = model(batch_to)
+            embedding_from = model(batch_from)
         
-        #     loss = criterion(embedding_to, embedding_from)
+            loss = criterion(embedding_to, embedding_from)
         
-        #     train_loss += loss.item()
+            train_loss += loss.item()
         
-        #     loss.backward()
+            loss.backward()
         
-        #     optimizer.step()
+            optimizer.step()
 
         train_losses.append(train_loss.item())
 
