@@ -15,11 +15,11 @@ import torch.nn.functional as F
 from torch.autograd import Function
 
 
-grads = {}
-def save_grad(name):
-    def hook(grad):
-        grads[name] = grad
-    return hook
+# grads = {}
+# def save_grad(name):
+#     def hook(grad):
+#         grads[name] = grad
+#     return hook
     
 
 # borrowed from Hassan Askary
@@ -95,7 +95,7 @@ class VisualImitation(nn.Module):
         :return: [N, 1000, 1000, 10] - for all N datapoints, calculate its single I_hat_i (I_hat_i[posx][posy]=one_hot_class_label)
         """
         # print("z: ", z.requires_grad)
-        z.register_hook(save_grad('z'))
+        # z.register_hook(save_grad('z'))
 
         # get mask_mat
         mask_mat = self.get_mask_mat(z)
@@ -118,7 +118,7 @@ class VisualImitation(nn.Module):
         """
         
         I_hat_single = self.get_I_hat_single(z)
-        I_hat_single.register_hook(save_grad('I_hat_single'))
+        # I_hat_single.register_hook(save_grad('I_hat_single'))
         
         I_hat, _ = torch.max(I_hat_single, dim=0)
 

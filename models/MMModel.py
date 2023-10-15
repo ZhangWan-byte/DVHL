@@ -8,12 +8,12 @@ from .VIModules import VisualImitation
 
 
 class MMModel(nn.Module):
-    def __init__(self, MM_I_wPATH, MM_II_wPATH, freeze=(False, False), device=torch.device('cuda')):
+    def __init__(self, MM_I_wPATH, MM_II_wPATH, cnn_layers=[2,2,2,2], freeze=(False, False), device=torch.device('cuda')):
         super(MMModel, self).__init__()
 
         # configure MM_I and MM_II
         self.MM_I = Encoder(output_dim=2)
-        self.MM_II = HumanModel(cnn_type='resnet18', metric_num=16)
+        self.MM_II = HumanModel(cnn_layers=cnn_layers, metric_num=16)
 
         if MM_I_wPATH != None or MM_II_wPATH != None:
             self.init_weights(MM_I_wPATH, MM_II_wPATH)

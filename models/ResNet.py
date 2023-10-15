@@ -1,6 +1,7 @@
 # modified from https://github.com/weiaicunzai/pytorch-cifar100/blob/master/models/resnet.py
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 class BasicBlock(nn.Module):
     """Basic Block for resnet 18 and resnet 34

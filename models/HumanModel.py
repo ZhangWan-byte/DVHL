@@ -6,22 +6,24 @@ from metrics import Stress, CCA, NLM
 from metrics import LCMC, Trustworthiness, NeRV, AUClogRNX
 
 class HumanModel(nn.Module):
-    def __init__(self, cnn_type='resnet18', metric_num=9):
+    def __init__(self, cnn_layers=[2,2,2,2], metric_num=9):
         super(HumanModel, self).__init__()
         
         # cnn tower
-        if cnn_type=="resnet18":
-            self.cnn = resnet18()
-        elif cnn_type=="resnet34":
-            self.cnn = resnet34()
-        else:
-            print("HumanModel wrong cnn_type!")
-            exit()
+        self.cnn = ResNet(BasicBlock, cnn_layers)
 
         # preference tower
         self.mu = nn.Parameter(torch.zeros((metric_num,1)))
         self.logvar = nn.Parameter(torch.log(torch.ones((metric_num,1))))
         self.user_weights = nn.Parameter(torch.rand((metric_num,1)))
+        self.pref_mlp = nn.Sequential(
+            nn.Linear(metric_num, metric_num), 
+            nn.ReLU(), 
+            # TODO
+        )
+
+        # fusion layer
+        # TODO
 
         # prediction heads
         # Q1: 
@@ -61,7 +63,7 @@ class HumanModel(nn.Module):
         """
 
         # scagnostics
-        all_scags = scagnostics.compute(z_umap[:, 0], z_umap[:, 1])
+        all_scags = scagnostics.compute(z[:, 0], z[:, 1])
 
         # # cluster separability
         # abw_score = ABW.compute(visu=z, labels=labels)
@@ -132,7 +134,7 @@ class HumanModel(nn.Module):
         visual_feature = self.cnn(I_hat)                    # feature for visual perception
 
         # preference tower
-        m = self.calc_metric(z=z, labels=labels, x=x)       # metric values
+        m = self.calc_metrics(z=z, labels=labels, x=x)       # metric values
         d = self.reparameterise(self.mu, self.logvar)       # random d for uncertainty
         w = F.sigmoid(self.user_weights)                    # quasi-binary w for personal preference over metrics
         user_preference = self.pref_mlp(m * d * w)          # feature for user preference

@@ -66,28 +66,7 @@ if __name__=='__main__':
         json.dump(args.__dict__, f, indent=4)
 
 
-    # data preprocessing
-    transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))])
-    trainTransform  = tv.transforms.Compose([tv.transforms.ToTensor(), tv.transforms.Normalize((0.1307,), (0.3081,))])
-    trainset = tv.datasets.MNIST(root='./data',  train=True, download=False, transform=transform)
-    testset = tv.datasets.MNIST(root='./data',  train=False, download=False, transform=transform)
-
-    traindata = [i[0].unsqueeze(0) for i in trainset]
-    trainlabel = [i[1] for i in trainset]
-    testdata = [i[0].unsqueeze(0) for i in testset]
-    testlabel = [i[1] for i in testset]
-
-    X = traindata + testdata
-    y = trainlabel + testlabel
-    X = torch.vstack(X)
-    print("X.shape: {}".format(X.shape))        # X.shape: torch.Size([70000, 1, 28, 28])
-
-
-    # dataset preparation
-    graph_constructor =  ConstructUMAPGraph(metric='euclidean', n_neighbors=args.n_neighbors, batch_size=1024, random_state=42)
-    epochs_per_sample, head, tail, weight = graph_constructor(X)
-    dataset = UMAPDataset(X, epochs_per_sample, head, tail, weight, device=args.device, batch_size=1024)
-
+    train_dataset, test_dataset = get_dataset(data='MNIST', DR='UMAP', args=args)
 
     # loss function
     if args.DR=="UMAP":
