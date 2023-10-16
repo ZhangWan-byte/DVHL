@@ -90,7 +90,7 @@ def train_epoch_DR(model, criterion, optimizer, train_dataset, test_dataset, epo
 
         eval_losses.append(np.mean(eval_loss))
 
-        print('epoch: {}, train_loss: {}, eval_loss'.format(epoch, train_loss, eval_loss))
+        print('DR - epoch: {}, train_loss: {}, eval_loss'.format(epoch, train_losses[-1], eval_losses[-1]))
 
     return model, train_losses, eval_losses
 
@@ -111,7 +111,7 @@ def train_epoch_HM(model, criterion, optimizer, dataloader, epochs=20, device='c
 
     for epoch in range(epochs):
 
-        train_loss = 0.
+        train_loss = []
         
         for X, y, feedback in tqdm(dataloader):
             # print("feedback: ", feedback.shape)
@@ -124,7 +124,7 @@ def train_epoch_HM(model, criterion, optimizer, dataloader, epochs=20, device='c
 
             # loss_li = calc_multi_loss(answer=pred_answers, feedback=feedback[0].to(torch.device(device)))
 
-            train_loss += loss.item()
+            train_loss.append(loss.item())
             # print("loss_li, ", loss_li)
             
             loss.backward()
@@ -133,6 +133,6 @@ def train_epoch_HM(model, criterion, optimizer, dataloader, epochs=20, device='c
 
         train_losses.append(np.mean(train_loss))
 
-        print('epoch: {}, loss: {}'.format(epoch, train_loss))
+        print('HM - epoch: {}, loss: {}'.format(epoch, train_losses[-1]))
 
     return model, train_losses
