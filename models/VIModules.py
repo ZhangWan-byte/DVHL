@@ -59,23 +59,23 @@ class VisualImitation(nn.Module):
         :return: mask matrix at pts of datapoint z
         """
 
-        a0 = torch.ones((z.shape[0], 1000, 1000), requires_grad=True).to(self.device)
-        b0 = torch.ones((z.shape[0], 1000, 1000), requires_grad=True).to(self.device)
-        a = a0 * z[:, 0].reshape(-1,1,1) * 1000
-        b = b0 * z[:, 1].reshape(-1,1,1) * 1000
+        a0 = torch.ones((z.shape[0], self.size, self.size), requires_grad=True).to(self.device)
+        b0 = torch.ones((z.shape[0], self.size, self.size), requires_grad=True).to(self.device)
+        a = a0 * z[:, 0].reshape(-1,1,1) * self.size
+        b = b0 * z[:, 1].reshape(-1,1,1) * self.size
 
         # transpose happens here
         # pos - left-up are all positive
-        gridx_pos = torch.arange(0,1000).to(self.device)
-        gridy_pos = torch.arange(0,1000).to(self.device)
+        gridx_pos = torch.arange(0,self.size).to(self.device)
+        gridy_pos = torch.arange(0,self.size).to(self.device)
 
         x_pos = nn.ReLU()(a-gridx_pos)
         y_pos = nn.ReLU()(b-gridy_pos.reshape(-1,1))
         pos = nn.ReLU()(x_pos*y_pos)
 
         # neg - right-bottom are all positive
-        gridx_neg = torch.arange(1,1001).to(self.device)
-        gridy_neg = torch.arange(1,1001).to(self.device)
+        gridx_neg = torch.arange(1,self.size+1).to(self.device)
+        gridy_neg = torch.arange(1,self.size+1).to(self.device)
 
         x_neg = nn.ReLU()(gridx_neg-a)
         y_neg = nn.ReLU()(gridy_neg.reshape(-1,1)-b)
@@ -128,10 +128,10 @@ class VisualImitation(nn.Module):
         return I_hat.float()
 
 
-def get_Ihat(Z):
-    mat = np.zeros((1000,1000))
+def get_Ihat(Z, size=1000):
+    mat = np.zeros((size,size))
     for i in range(len(Z)):
-        xx = min(int(np.floor(Z[i,0]*1000)), 999)
-        yy = min(int(np.floor(Z[i,1]*1000)), 999)
+        xx = min(int(np.floor(Z[i,0]*size)), size-1)
+        yy = min(int(np.floor(Z[i,1]*size)), size-1)
         mat[xx,yy] = Z[i, 2]
     return mat
