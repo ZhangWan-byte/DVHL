@@ -95,7 +95,7 @@ def train_epoch_DR(model, criterion, optimizer, train_dataset, test_dataset, epo
     return model, train_losses, eval_losses
 
 
-def train_epoch_HM(model, criterion, optimizer, dataloader, epochs=20, device='cuda'):
+def train_epoch_HM(model, criterion, optimizer, dataloader, epochs=20, device='cuda', scheduler_HM=None):
     """train MM_II and freeze MM_I
 
     :param model: MM_II
@@ -131,8 +131,11 @@ def train_epoch_HM(model, criterion, optimizer, dataloader, epochs=20, device='c
         
             optimizer.step()
 
+        if scheduler_HM!=None:
+            scheduler_HM.step()
+
         train_losses.append(np.mean(train_loss))
 
-        print('HM - epoch: {}, loss: {}'.format(epoch, train_losses[-1]))
+        print('HM - epoch: {}, loss: {}, lr: {}'.format(epoch, train_losses[-1], scheduler_HM.get_lr()[0]))
 
     return model, train_losses

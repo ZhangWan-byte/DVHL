@@ -83,14 +83,15 @@ if __name__=='__main__':
 
     # optimisation
     optimizer_HM = torch.optim.Adam(model.MM_II.parameters(), lr=1e-4)
-    # # scheduler_II = ...
+    scheduler_HM =torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_HM, T_max=args.epochs_HM, eta_min=1e-8)
 
     model, train_losses = train_epoch_HM(
         model, 
         criterion_HM, 
         optimizer_HM, 
         train_loader, 
-        epochs=args.epochs_HM
+        epochs=args.epochs_HM, 
+        scheduler_HM = scheduler_HM
     )
 
     torch.save(model.MM_II.state_dict(), os.path.join(result_path, 'HM_weights_{}.pt'.format(args.exp_name)))
