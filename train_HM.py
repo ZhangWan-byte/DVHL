@@ -41,7 +41,7 @@ if __name__=='__main__':
     # training params
     parser.add_argument('--device', type=str, default='cuda', help='device cpu or cuda')
 
-    parser.add_argument('--batch_size_HM', type=int, default=1, help='batch size - phase Human')
+    parser.add_argument('--batch_size_HM', type=int, default=1024, help='batch size - phase Human')
     parser.add_argument('--epochs_HM', type=int, default=100, help='training epochs - phase Human')
 
     # data
@@ -73,6 +73,10 @@ if __name__=='__main__':
 
     # get dataloader
     train_loader, test_loader = get_dataset(data='MNIST', DR='UMAP', args=args)
+    # for X, y, feedback in tqdm(train_loader):
+    #     break
+
+    # print(X.shape, y.shape, feedback.shape)
 
     # loss function
     criterion_HM = nn.CrossEntropyLoss()
@@ -89,5 +93,5 @@ if __name__=='__main__':
         epochs=args.epochs_HM
     )
 
-    torch.save(model.MM_II.state_dict(), os.path.join(result_path, 'HM_weights_{}.pt'.format(exp_name)))
+    torch.save(model.MM_II.state_dict(), os.path.join(result_path, 'HM_weights_{}.pt'.format(args.exp_name)))
     

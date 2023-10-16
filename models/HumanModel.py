@@ -68,32 +68,36 @@ class HumanModel(nn.Module):
         )
 
         # fusion layer
-        self.fusion = AttnFusion(visual_size=100, metric_size=metric_num, hidden_dim=hidden_dim)
+        self.fusion = AttnFusion(visual_size=16, metric_size=metric_num, hidden_dim=hidden_dim)
 
         # prediction heads
         # Q1: 
         self.head1 = nn.Sequential(
             nn.Linear(self.hidden_dim, self.hidden_dim), 
             nn.ReLU(), 
-            nn.Linear(self.hidden_dim, 5)
+            nn.Linear(self.hidden_dim, 5), 
+            # nn.Softmax()
         )
         # Q2: 
         self.head2 = nn.Sequential(
             nn.Linear(self.hidden_dim, self.hidden_dim), 
             nn.ReLU(), 
-            nn.Linear(self.hidden_dim, 5)
+            nn.Linear(self.hidden_dim, 5), 
+            # nn.Softmax()
         )
         # Q3: 
         self.head3 = nn.Sequential(
             nn.Linear(self.hidden_dim, self.hidden_dim), 
             nn.ReLU(), 
-            nn.Linear(self.hidden_dim, 5)
+            nn.Linear(self.hidden_dim, 5), 
+            # nn.Softmax()
         )
         # Q4: 
         self.head4 = nn.Sequential(
             nn.Linear(self.hidden_dim, self.hidden_dim), 
             nn.ReLU(), 
-            nn.Linear(self.hidden_dim, 5)
+            nn.Linear(self.hidden_dim, 5), 
+            # nn.Softmax()
         )
 
     def calc_metrics(self, z, labels, x):

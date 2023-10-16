@@ -78,7 +78,7 @@ def normalise(z):
     if type(z) == type(torch.ones(1)):
         z0 = (z[:,0] - torch.min(z[:,0])) / (torch.max(z[:,0]) - torch.min(z[:,0]))
         z1 = (z[:,1] - torch.min(z[:,1])) / (torch.max(z[:,1]) - torch.min(z[:,1]))
-        z = torch.vstack([z0.reshape(-1,1), z1.reshape(-1,1)])
+        z = torch.hstack([z0.reshape(-1,1), z1.reshape(-1,1)])
     
     if type(z) == type(np.ones(1)):
         z0 = (z[:,0] - np.min(z[:,0])) / (np.max(z[:,0]) - np.min(z[:,0]))

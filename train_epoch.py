@@ -4,6 +4,23 @@ import torch.nn.functional as F
 
 from models import *
 
+
+def calc_multi_loss(answer, feedback):
+    """calculate question-answer loss
+
+    :param feedback: predicted answer
+    :param feedback: feedback
+    """
+
+    loss_li = []
+
+    for i in range(len(feedback)):
+        loss_i = F.cross_entropy(input=answer[i].view(1,-1), target=feedback[i].view(1,-1))
+        loss_li.append(loss_i.item())
+
+    return loss_li
+
+
 def train_epoch_DR(model, criterion, optimizer, train_dataset, test_dataset, epochs=20, device='cuda'):
     """train MM_I and freeze MM_II
 
@@ -82,7 +99,6 @@ def train_epoch_HM(model, criterion, optimizer, dataloader, epochs=20, device='c
     """train MM_II and freeze MM_I
 
     :param model: MM_II
-    :param criterion: loss function
     :param epochs: number of training epochs, defaults to 20
     :return: 
     """
@@ -98,20 +114,24 @@ def train_epoch_HM(model, criterion, optimizer, dataloader, epochs=20, device='c
         train_loss = 0.
         
         for X, y, feedback in tqdm(dataloader):
-        
+            # print("feedback: ", feedback.shape)
             optimizer.zero_grad()
         
             pred_z, pred_answers = model(x=X.to(torch.device(device)), labels=y.to(torch.device(device)))
+            # print("1 pred_z: {}\npred_answers: {}".format(pred_z.shape, pred_answers))
+            loss = criterion(input=pred_answers, target=feedback[0].squeeze().to(torch.device(device)))
+            # print("2 pred_z: {}\npred_answers: {}".format(pred_z.shape, pred_answers))
 
-            loss = criterion(input=pred_answers, target=feedback[0].to(torch.device(device)))
-        
+            # loss_li = calc_multi_loss(answer=pred_answers, feedback=feedback[0].to(torch.device(device)))
+
             train_loss += loss.item()
-        
+            # print("loss_li, ", loss_li)
+            
             loss.backward()
         
             optimizer.step()
 
-        train_losses.append(train_loss)
+        train_losses.append(np.mean(train_loss))
 
         print('epoch: {}, loss: {}'.format(epoch, train_loss))
 

@@ -143,3 +143,7 @@ def get_dataset(args, data='MNIST', DR='UMAP'):
         test_loader = DataLoader(test_dataset_HM, batch_size=args.batch_size_HM, shuffle=False)
 
         return train_loader, test_loader
+
+    else:
+        print("wrong args.train!")
+        exit()

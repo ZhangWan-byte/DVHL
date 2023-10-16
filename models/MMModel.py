@@ -1,3 +1,5 @@
+import numpy as np
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -5,6 +7,24 @@ import torch.nn.functional as F
 from .DRModel import Encoder
 from .HumanModel import HumanModel
 from .VIModules import VisualImitation
+
+
+def normalise(z):
+    """normalise coordinates to 0~1
+
+    :param z: normalised coordinates
+    """
+    if type(z) == type(torch.ones(1)):
+        z0 = (z[:,0] - torch.min(z[:,0])) / (torch.max(z[:,0]) - torch.min(z[:,0]))
+        z1 = (z[:,1] - torch.min(z[:,1])) / (torch.max(z[:,1]) - torch.min(z[:,1]))
+        z = torch.hstack([z0.reshape(-1,1), z1.reshape(-1,1)])
+    
+    if type(z) == type(np.ones(1)):
+        z0 = (z[:,0] - np.min(z[:,0])) / (np.max(z[:,0]) - np.min(z[:,0]))
+        z1 = (z[:,1] - np.min(z[:,1])) / (np.max(z[:,1]) - np.min(z[:,1]))
+        z = np.hstack([z0.reshape(-1,1), z1.reshape(-1,1)])
+
+    return z
 
 
 class MMModel(nn.Module):
@@ -44,11 +64,15 @@ class MMModel(nn.Module):
     def forward(self, x, labels=None):
                
         z = self.MM_I(x)
-         
-        I_hat = self.VI(z=z, labels=labels)
-
+        # print("z: ", z.shape)
+        
+        I_hat = self.VI(z=normalise(z), labels=labels)
+        # print("I_hat: ", I_hat.shape)
+        
         I_hat = I_hat.permute(2,1,0).unsqueeze(0)
+        # print("I_hat: ", I_hat.shape)
 
         answers = self.MM_II(I_hat=I_hat, z=z, labels=labels, x=x)
-
+        # print("answers: ", answers.shape)
+        
         return z, answers
