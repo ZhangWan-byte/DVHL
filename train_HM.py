@@ -78,7 +78,7 @@ if __name__=='__main__':
     criterion_HM = nn.CrossEntropyLoss()
 
     # optimisation
-    optimizer_HM = torch.optim.Adam(model.MM_II.parameters(), lr=1e-3)
+    optimizer_HM = torch.optim.Adam(model.MM_II.parameters(), lr=1e-4)
     # # scheduler_II = ...
 
     model, train_losses = train_epoch_HM(

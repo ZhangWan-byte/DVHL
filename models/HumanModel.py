@@ -75,22 +75,25 @@ class HumanModel(nn.Module):
         self.head1 = nn.Sequential(
             nn.Linear(self.hidden_dim, self.hidden_dim), 
             nn.ReLU(), 
-            nn.Linear(self.hidden_dim, 1), 
-            nn.Sigmoid()
+            nn.Linear(self.hidden_dim, 5)
         )
         # Q2: 
         self.head2 = nn.Sequential(
             nn.Linear(self.hidden_dim, self.hidden_dim), 
             nn.ReLU(), 
-            nn.Linear(self.hidden_dim, 1), 
-            nn.Sigmoid()
+            nn.Linear(self.hidden_dim, 5)
         )
         # Q3: 
         self.head3 = nn.Sequential(
             nn.Linear(self.hidden_dim, self.hidden_dim), 
             nn.ReLU(), 
-            nn.Linear(self.hidden_dim, 1), 
-            nn.Sigmoid()
+            nn.Linear(self.hidden_dim, 5)
+        )
+        # Q4: 
+        self.head4 = nn.Sequential(
+            nn.Linear(self.hidden_dim, self.hidden_dim), 
+            nn.ReLU(), 
+            nn.Linear(self.hidden_dim, 5)
         )
 
     def calc_metrics(self, z, labels, x):
@@ -183,9 +186,12 @@ class HumanModel(nn.Module):
         feats = self.fusion(user_preference=user_preference, visual_feature=visual_feature)
 
         # prediction heads
-        q1 = self.head1(feats)
-        q2 = self.head2(feats)
-        q3 = self.head3(feats)
+        a1 = self.head1(feats)
+        a2 = self.head2(feats)
+        a3 = self.head3(feats)
+        a4 = self.head3(feats)
         # ...
 
-        return q1, q2, q3
+        answers = torch.vstack([a1, a2, a3, a4])
+
+        return answers

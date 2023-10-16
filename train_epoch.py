@@ -102,8 +102,8 @@ def train_epoch_HM(model, criterion, optimizer, dataloader, epochs=20, device='c
             optimizer.zero_grad()
         
             pred_z, pred_answers = model(x=X.to(torch.device(device)), labels=y.to(torch.device(device)))
-        
-            loss = criterion(pred_answers, feedback.to(torch.device(device)))
+
+            loss = criterion(input=pred_answers, target=feedback[0].to(torch.device(device)))
         
             train_loss += loss.item()
         
@@ -111,7 +111,7 @@ def train_epoch_HM(model, criterion, optimizer, dataloader, epochs=20, device='c
         
             optimizer.step()
 
-        train_losses.append(train_loss.item())
+        train_losses.append(train_loss)
 
         print('epoch: {}, loss: {}'.format(epoch, train_loss))
 
