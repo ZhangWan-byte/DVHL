@@ -47,7 +47,7 @@ class AttnFusion(nn.Module):
 
 
 class HumanModel(nn.Module):
-    def __init__(self, cnn_layers=[2,2,2,2], metric_num=9, hidden_dim=100, device=torch.device('cuda')):
+    def __init__(self, cnn_layers=[1,1,1,1], metric_num=9, hidden_dim=100, device=torch.device('cuda')):
         super(HumanModel, self).__init__()
         
         self.hidden_dim = hidden_dim

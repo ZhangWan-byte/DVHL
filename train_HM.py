@@ -65,6 +65,7 @@ if __name__=='__main__':
     model = MMModel(
         MM_I_wPATH=args.MM_I_wPATH, 
         MM_II_wPATH=None, 
+        cnn_layers=[1,1,1,1], 
         freeze=(True, False), 
         device=torch.device(args.device)
     )
