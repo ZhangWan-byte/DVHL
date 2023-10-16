@@ -8,7 +8,7 @@ from .VIModules import VisualImitation
 
 
 class MMModel(nn.Module):
-    def __init__(self, MM_I_wPATH, MM_II_wPATH, cnn_layers=[1,1,1,1], freeze=(False, False), device=torch.device('cuda')):
+    def __init__(self, MM_I_wPATH, MM_II_wPATH, cnn_layers=[1,1,1,1], VI_size=100, freeze=(False, False), device=torch.device('cuda')):
         super(MMModel, self).__init__()
 
         # configure MM_I and MM_II
@@ -31,7 +31,7 @@ class MMModel(nn.Module):
             self.MM_II.eval()
 
         # configure VisualImitation module
-        self.VI = VisualImitation(size=1000, device=device)
+        self.VI = VisualImitation(size=VI_size, device=device)
 
 
     def init_weights(self, MM_I_wPATH, MM_II_wPATH):

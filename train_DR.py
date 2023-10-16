@@ -93,6 +93,7 @@ if __name__=='__main__':
         MM_I_wPATH=args.MM_I_wPATH, 
         MM_II_wPATH=args.MM_II_wPATH, 
         cnn_layers=[1,1,1,1], 
+        VI_size=100, 
         freeze=(False, True), 
         device=torch.device(args.device)
     )
