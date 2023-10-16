@@ -35,10 +35,10 @@ if __name__=='__main__':
 
     # arguments
     parser = argparse.ArgumentParser()
-    # parser.add_argument('--train', type=str, default='DR', help="train DR or HM")
-    parser.add_argument('--MM_I_wPATH', type=str, default="./results/encoder_weights.pt", help='weights to initialise DR model')
+    parser.add_argument('--train', type=str, default='DR', help="train DR or HM")
+    parser.add_argument('--MM_I_wPATH', type=str, default="./results/DR_weights.pt", help='weights to initialise DR model')
     parser.add_argument('--MM_II_wPATH', type=str, default=None, help='weights to initialise human model')
-    parser.add_argument('--DR', type=str, default="UMAP", help='config file path')
+    parser.add_argument('--DR', type=str, default="UMAP", help='UMAP or t-SNE')
     
     # UMAP hyper-params
     parser.add_argument('--n_neighbors', type=int, default=15, help='n_neighbors for graph construction')
@@ -52,8 +52,8 @@ if __name__=='__main__':
     parser.add_argument('--batch_size_DR', type=int, default=1024, help='batch size - phase DR')
     parser.add_argument('--epochs_DR', type=int, default=20, help='training epochs - phase DR')
 
-    parser.add_argument('--batch_size_Human', type=int, default=1, help='batch size - phase Human')
-    parser.add_argument('--epochs_Human', type=int, default=100, help='training epochs - phase Human')
+    parser.add_argument('--batch_size_HM', type=int, default=1, help='batch size - phase Human')
+    parser.add_argument('--epochs_HM', type=int, default=100, help='training epochs - phase Human')
 
     # save path name
     parser.add_argument('--exp_name', type=str, help='name of this experiment')
@@ -69,7 +69,7 @@ if __name__=='__main__':
         json.dump(args.__dict__, f, indent=4)
 
 
-    train_dataset, test_dataset = get_dataset(data='MNIST', DR='UMAP', args=args)
+    train_dataset, test_dataset = get_dataset(data='MNIST', DR='UMAP', args=args, ret='DR')
 
     # loss function
     if args.DR=="UMAP":
@@ -81,7 +81,7 @@ if __name__=='__main__':
             edge_weight=None, 
             repulsion_strength=args.repulsion_strength
         )
-    elif args.DR=="UMAP":
+    elif args.DR=="t-SNE":
         pass
     else:
         print("wrong args.DR")
@@ -128,5 +128,5 @@ if __name__=='__main__':
         epochs=args.epochs_DR
     )
 
-    torch.save(model.state_dict(), os.path.join(result_path, 'encoder_weights_1.pt'))
+    torch.save(model.state_dict(), os.path.join(result_path, 'DR_weights_{}.pt'.format(exp_name)))
     

@@ -27,7 +27,7 @@ def draw_Ihat(I_hat):
     plt.show()
 
 
-def draw_z(z, cls, s=25, x_highlight=None, y_highlight=None):
+def draw_z(z, cls, s=25, x_highlight=None, y_highlight=None, save_path=None, display=True):
     """draw data and labels
 
     :param z: (n, 2) -- 2D data
@@ -60,7 +60,14 @@ def draw_z(z, cls, s=25, x_highlight=None, y_highlight=None):
     plt.xlim((0, 1))
     plt.ylim((0, 1))
     
-    plt.show()
+    if save_path!=None:
+        plt.savefig(save_path)
+
+    if display==True:
+        plt.show()
+    else:
+        plt.ioff()
+        plt.close()
 
 
 def normalise(z):

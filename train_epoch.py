@@ -78,7 +78,7 @@ def train_epoch_DR(model, criterion, optimizer, train_dataset, test_dataset, epo
     return model, train_losses, eval_losses
 
 
-def train_epoch_Human(model, criterion, optimizer, epochs=20):
+def train_epoch_HM(model, criterion, optimizer, dataloader, epochs=20, device='cuda'):
     """train MM_II and freeze MM_I
 
     :param model: MM_II
@@ -97,13 +97,13 @@ def train_epoch_Human(model, criterion, optimizer, epochs=20):
 
         train_loss = 0.
         
-        for batch_to, batch_from in tqdm(dataset.get_batches()):
+        for X, y, feedback in tqdm(dataloader):
         
             optimizer.zero_grad()
         
-            Qs = model(batch_to)
+            pred_z, pred_answers = model(x=X.to(torch.device(device)), labels=y.to(torch.device(device)))
         
-            loss = criterion(embedding_to, embedding_from)
+            loss = criterion(pred_answers, feedback.to(torch.device(device)))
         
             train_loss += loss.item()
         
