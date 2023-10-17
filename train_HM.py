@@ -72,7 +72,7 @@ if __name__=='__main__':
     )
 
     # get dataloader
-    train_loader, test_loader = get_dataset(data='MNIST', DR='UMAP', args=args)
+    train_loader, test_loader = get_dataset(args=args, data='MNIST', DR='UMAP')
     # for X, y, feedback in tqdm(train_loader):
     #     break
 

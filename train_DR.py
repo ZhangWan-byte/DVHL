@@ -52,8 +52,11 @@ if __name__=='__main__':
     parser.add_argument('--batch_size_DR', type=int, default=1024, help='batch size - phase DR')
     parser.add_argument('--epochs_DR', type=int, default=20, help='training epochs - phase DR')
 
-    parser.add_argument('--batch_size_HM', type=int, default=1, help='batch size - phase Human')
-    parser.add_argument('--epochs_HM', type=int, default=100, help='training epochs - phase Human')
+    # data
+    parser.add_argument('--feedback_path', type=str, default=None, help='path of human feedback')
+
+    # parser.add_argument('--batch_size_HM', type=int, default=1, help='batch size - phase Human')
+    # parser.add_argument('--epochs_HM', type=int, default=100, help='training epochs - phase Human')
 
     # save path name
     parser.add_argument('--exp_name', type=str, help='name of this experiment')
@@ -69,7 +72,7 @@ if __name__=='__main__':
         json.dump(args.__dict__, f, indent=4)
 
 
-    train_dataset, test_dataset = get_dataset(data='MNIST', DR='UMAP', args=args, ret='DR')
+    train_dataset, test_dataset = get_dataset(args=args, data='MNIST', DR='UMAP')
 
     # loss function
     if args.DR=="UMAP":
@@ -99,29 +102,12 @@ if __name__=='__main__':
     )
 
 
-    # os.makedirs(os.path.join(result_path, "/phase1/"))
-    # print("Go to {} and give feedback.".format(os.path.join(result_path, "phase1")))
-    # input("Press Enter to continue...")
-
-
     # optimisation
-    optimizer_DR = torch.optim.Adam(model.MM_I.parameters(), lr=1e-3)
+    optimizer_DR = torch.optim.Adam(model.MM_I.parameters(), lr=1e-4)
     # scheduler_I = ...
-    # optimizer_Human = torch.optim.Adam(model.MM_II.parameters(), lr=1e-3)
-    # # scheduler_II = ...
-
-
-    # # 1.1 human model
-    # model = MMModel(
-    #     MM_I_wPATH="./results/encoder_weights.pt", 
-    #     MM_II_wPATH=None, 
-    #     freeze=(True, False), 
-    #     device=torch.device(args.device)
-    # )
-    # train_Human(model, criterion_Human, optimizer_Human, epochs=args.epochs_Human)
 
     # 1.2 DR model
-    model, train_losses = train_epoch_DR(
+    model, train_losses, eval_losses = train_epoch_DR(
         model=model, 
         criterion=criterion_DR, 
         optimizer=optimizer_DR, 
@@ -130,5 +116,7 @@ if __name__=='__main__':
         epochs=args.epochs_DR
     )
 
-    torch.save(model.state_dict(), os.path.join(result_path, 'DR_weights_{}.pt'.format(exp_name)))
+    torch.save(model.MM_I.state_dict(), os.path.join(result_path, 'DR_weights_{}.pt'.format(args.exp_name)))
+    torch.save(torch.tensor(train_losses), os.path.join(result_path, 'train_losses_{}.pt'.format(args.exp_name)))
+    torch.save(torch.tensor(eval_losses), os.path.join(result_path, 'eval_losses_{}.pt'.format(args.exp_name)))
     

@@ -14,7 +14,7 @@ from models import *
 
 class UMAPDataset:
 
-    def __init__(self, data, labels, epochs_per_sample, head, tail, weight, device='cpu', batch_size=1000):
+    def __init__(self, data, labels, epochs_per_sample, head, tail, weight, feedback, device='cpu', batch_size=1000):
 
         """
         create dataset for iteration on graph edges
@@ -24,6 +24,7 @@ class UMAPDataset:
         self.batch_size = batch_size
         self.data = data
         self.labels = labels
+        self.feedback = feedback
         self.device = device
 
         self.edges_to_exp, self.edges_from_exp = (
@@ -37,9 +38,12 @@ class UMAPDataset:
         self.edges_to_exp = self.edges_to_exp[shuffle_mask]
         self.edges_from_exp = self.edges_from_exp[shuffle_mask]
 
+        # iteration num
+        self.batches_per_epoch = int(self.num_edges / self.batch_size / 5)
+
     def get_batches(self):
-        batches_per_epoch = int(self.num_edges / self.batch_size / 5)
-        for _ in range(batches_per_epoch):
+        # batches_per_epoch = int(self.num_edges / self.batch_size / 5)
+        for _ in range(self.batches_per_epoch):
             rand_index = np.random.randint(0, len(self.edges_to_exp) - 1, size=self.batch_size)
             batch_index_to = self.edges_to_exp[rand_index]
             batch_index_from = self.edges_from_exp[rand_index]
@@ -47,7 +51,7 @@ class UMAPDataset:
             batch_to = torch.Tensor(self.data[batch_index_to]).to(self.device)
             batch_from = torch.Tensor(self.data[batch_index_from]).to(self.device)
             
-            yield (batch_to, batch_from, batch_index_to, batch_index_from, self.labels)
+            yield (batch_to, batch_from, batch_index_to, batch_index_from, self.labels, self.feedback)
 
 
 class HumanDataset(Dataset):
@@ -64,6 +68,9 @@ class HumanDataset(Dataset):
 
 
 def get_dataset(args, data='MNIST', DR='UMAP'):
+
+    if args.feedback_path != None:
+        feedback = torch.load(args.feedback_path)
 
     # load data
     if data=='MNIST':
@@ -105,6 +112,7 @@ def get_dataset(args, data='MNIST', DR='UMAP'):
                 train_head, 
                 train_tail, 
                 train_weight, 
+                feedback=feedback, 
                 device=args.device, 
                 batch_size=args.batch_size_DR
             )
@@ -123,6 +131,7 @@ def get_dataset(args, data='MNIST', DR='UMAP'):
                 test_head, 
                 test_tail, 
                 test_weight, 
+                feedback=feedback,  
                 device=args.device, 
                 batch_size=args.batch_size_DR
             )
