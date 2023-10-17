@@ -56,8 +56,10 @@ class MMModel(nn.Module):
 
     def init_weights(self, MM_I_wPATH, MM_II_wPATH):
         if MM_I_wPATH != None:
+            print("loading MM_I weights from {}".format(MM_I_wPATH))
             self.MM_I.load_state_dict(torch.load(MM_I_wPATH))
         if MM_II_wPATH != None:
+            print("loading MM_II weights from {}".format(MM_II_wPATH))
             self.MM_II.load_state_dict(torch.load(MM_II_wPATH))
 
 
