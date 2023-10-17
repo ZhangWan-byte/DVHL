@@ -1,5 +1,7 @@
 from .ResNet import *
 
+import numpy as np
+
 from metrics import scagnostics
 from metrics import ABW, CAL, DSC, HM, NH, SC, CC
 from metrics import Stress, CCA, NLM
@@ -19,31 +21,31 @@ class AttnFusion(nn.Module):
         self.relu1 = nn.ReLU()
         self.linear2 = nn.Linear(visual_size+metric_size, hidden_dim)
 
-    def compute_attention(self, Q, K, V):
-        """dot-product attention
+    # def compute_attention(self, Q, K, V):
+    #     """dot-product attention
 
-        :param Q: query
-        :param K: key
-        :param V: value
-        :return: weighted sum
-        """
-        attention_scores = F.softmax(torch.matmul(Q, K.t()), dim=-1)
-        weighted_sum = torch.matmul(attention_scores, V)
+    #     :param Q: query
+    #     :param K: key
+    #     :param V: value
+    #     :return: weighted sum
+    #     """
+    #     attention_scores = F.softmax(torch.matmul(Q, K.t())/np.sqrt(self.hidden_dim), dim=-1)
+    #     weighted_sum = torch.matmul(attention_scores, V)
 
-        return weighted_sum
+    #     return weighted_sum
 
     def forward(self, visual_feature, user_preference):
         """attention and flatten
 
         :param user_preference: (1, 9)
-        :param visual_feature: (1, 100)
+        :param visual_feature: (1, 10)
         """
 
         # Q = self.proj_Q(user_preference)
         # K = self.proj_K(visual_feature)
         # V = self.proj_V(visual_feature)
 
-        # # (B, 100, 100)
+        # # (B, 10, 10)
         # fusion_attn = self.compute_attention(Q, K, V).view(1,-1)
 
 
