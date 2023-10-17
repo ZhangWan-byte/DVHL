@@ -120,6 +120,8 @@ def train_epoch_HM(model, criterion, optimizer, dataloader, epochs=20, device='c
     # fix DR model, train Human Model
     for param in model.MM_I.parameters():
         param.requires_grad = False
+    for param in model.MM_II.parameters():
+        param.requires_grad = True
 
     train_losses = []
 
@@ -145,9 +147,25 @@ def train_epoch_HM(model, criterion, optimizer, dataloader, epochs=20, device='c
         
             optimizer.step()
 
+            # print("mu: {}\nmu grad: {}".format(model.MM_II.mu.view(-1), model.MM_II.mu.grad.view(-1)))
+            # print("logvar: {}\nlogvar grad: {}".format(model.MM_II.logvar.view(-1), model.MM_II.logvar.grad.view(-1)))
+            # print("user_weights: {}\nuser_weights grad: {}".format(model.MM_II.user_weights.view(-1), model.MM_II.user_weights.grad.view(-1)))
+
+            # for p in model.MM_II.parameters():
+            #     if p.data.requires_grad==True:
+            #         print(p.name, p.data.shape, p.data.grad.shape, p.data.grad)
+            #     else:
+            #         print(p.name, p.data.shape)
+            # print(model.MM_II.fusion.proj_Q.weight, model.MM_II.fusion.proj_K.weight, model.MM_II.fusion.proj_V.weight)
+
+            # print(model.MM_II.fusion.proj_Q.weight.requires_grad, model.MM_II.fusion.proj_K.weight.requires_grad, model.MM_II.fusion.proj_V.weight.requires_grad)
+            # print(model.MM_II.fusion.proj_Q.weight.grad, model.MM_II.fusion.proj_K.weight.grad, model.MM_II.fusion.proj_V.weight.grad)
+
+            # print(model.MM_II.fusion.linear1.weight.requires_grad, model.MM_II.fusion.linear2.weight.requires_grad)
+            # print(model.MM_II.fusion.linear1.weight.grad, model.MM_II.fusion.linear2.weight.grad)
+
         if scheduler_HM!=None:
             scheduler_HM.step()
-
         train_losses.append(np.mean(train_loss))
 
         print('HM - epoch: {}, loss: {}, lr: {}'.format(epoch, train_losses[-1], scheduler_HM.get_lr()[0]))

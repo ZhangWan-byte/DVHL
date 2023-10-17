@@ -33,7 +33,7 @@ class MMModel(nn.Module):
 
         # configure MM_I and MM_II
         self.MM_I = Encoder(output_dim=2)
-        self.MM_II = HumanModel(cnn_layers=cnn_layers, metric_num=9, device=device)
+        self.MM_II = HumanModel(cnn_layers=cnn_layers, metric_num=9, hidden_dim=10, device=device)
 
         if MM_I_wPATH != None or MM_II_wPATH != None:
             self.init_weights(MM_I_wPATH, MM_II_wPATH)

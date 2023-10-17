@@ -7,13 +7,17 @@ from metrics import LCMC, Trustworthiness, NeRV, AUClogRNX
 
 
 class AttnFusion(nn.Module):
-    def __init__(self, visual_size=100, metric_size=9, hidden_dim=100):
+    def __init__(self, visual_size=100, metric_size=9, hidden_dim=10):
         super(AttnFusion, self).__init__()
 
         self.hidden_dim = hidden_dim
-        self.proj_Q = nn.Linear(metric_size, hidden_dim)
-        self.proj_K = nn.Linear(visual_size, hidden_dim)
-        self.proj_V = nn.Linear(visual_size, hidden_dim)
+        # self.proj_Q = nn.Linear(metric_size, hidden_dim)
+        # self.proj_K = nn.Linear(visual_size, hidden_dim)
+        # self.proj_V = nn.Linear(visual_size, hidden_dim)
+
+        self.linear1 = nn.Linear(visual_size+metric_size, visual_size+metric_size)
+        self.relu1 = nn.ReLU()
+        self.linear2 = nn.Linear(visual_size+metric_size, hidden_dim)
 
     def compute_attention(self, Q, K, V):
         """dot-product attention
@@ -35,19 +39,25 @@ class AttnFusion(nn.Module):
         :param visual_feature: (1, 100)
         """
 
-        Q = self.proj_Q(user_preference)
-        K = self.proj_K(visual_feature)
-        V = self.proj_V(visual_feature)
+        # Q = self.proj_Q(user_preference)
+        # K = self.proj_K(visual_feature)
+        # V = self.proj_V(visual_feature)
 
-        # (B, 100, 100)
-        fusion_attn = self.compute_attention(Q, K, V).view(1,-1)
+        # # (B, 100, 100)
+        # fusion_attn = self.compute_attention(Q, K, V).view(1,-1)
+
+
+        vu = torch.cat([visual_feature, user_preference], dim=1)
+        fusion_attn = self.linear1(vu)
+        fusion_attn = self.relu1(fusion_attn)
+        fusion_attn = self.linear2(fusion_attn)
 
         return fusion_attn
 
 
 
 class HumanModel(nn.Module):
-    def __init__(self, cnn_layers=[1,1,1,1], metric_num=9, hidden_dim=100, device=torch.device('cuda')):
+    def __init__(self, cnn_layers=[1,1,1,1], metric_num=9, hidden_dim=10, device=torch.device('cuda')):
         super(HumanModel, self).__init__()
         
         self.hidden_dim = hidden_dim
@@ -57,9 +67,9 @@ class HumanModel(nn.Module):
         self.cnn = ResNet(BasicBlock, cnn_layers)
 
         # preference tower
-        self.mu = nn.Parameter(torch.zeros((metric_num,1)))
-        self.logvar = nn.Parameter(torch.log(torch.ones((metric_num,1))))
-        self.user_weights = nn.Parameter(torch.rand((metric_num,1)))
+        self.mu = nn.Parameter(torch.zeros((metric_num, 1)))
+        self.logvar = nn.Parameter(torch.log(torch.ones((metric_num, 1))))
+        self.user_weights = nn.Parameter(torch.rand((metric_num, 1)))
         self.pref_mlp = nn.Sequential(
             nn.Linear(metric_num, metric_num), 
             nn.ReLU(), 
