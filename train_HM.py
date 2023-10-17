@@ -48,17 +48,23 @@ if __name__=='__main__':
     parser.add_argument('--feedback_path', type=str, default=None, help='path of human feedback')
 
     # save path name
-    parser.add_argument('--exp_name', type=str, help='name of this experiment')
+    parser.add_argument('--exp_dir', type=str, default=None, help='directory of this n-phase exp')
+    parser.add_argument('--exp_name', type=str, help='name of this experiment, e.g., II-1')
     args = parser.parse_args()
 
 
     # create saving directory
-    current_time = time.strftime('%y%m%d%H%M%S', time.localtime())
-    result_path = "./results/{}_{}".format(current_time, args.exp_name)
+    if args.exp_dir==None:
+        current_time = time.strftime('%y%m%d%H%M%S', time.localtime())
+        result_path = "./results/{}/{}/".format(current_time, args.exp_name)
+    else:
+        result_path = "./results/{}/{}/".format(args.exp_dir, args.exp_name)
+
     os.makedirs(result_path)
     print("saving dir: {}".format(result_path))
     with open(os.path.join(result_path, "args.json"), 'w') as f:
         json.dump(args.__dict__, f, indent=4)
+
 
 
     # human model
