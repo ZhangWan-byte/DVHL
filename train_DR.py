@@ -53,7 +53,8 @@ if __name__=='__main__':
     parser.add_argument('--epochs_DR', type=int, default=20, help='training epochs - phase DR')
 
     # data
-    parser.add_argument('--feedback_path', type=str, default=None, help='path of human feedback')
+    parser.add_argument('--feedback_path', type=str, default="./results/231016000038_I_0/feedback.pt", \
+        help='path of human feedback')
 
     # parser.add_argument('--batch_size_HM', type=int, default=1, help='batch size - phase Human')
     # parser.add_argument('--epochs_HM', type=int, default=100, help='training epochs - phase Human')

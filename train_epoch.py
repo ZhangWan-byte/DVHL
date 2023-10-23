@@ -2,6 +2,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+import warnings
+warnings.filterwarnings("ignore")
+
 from models import *
 
 
@@ -57,7 +60,12 @@ def train_epoch_DR(model, criterion, optimizer, train_dataset, test_dataset, epo
 
             loss_DR = criterion(embedding_to, embedding_from)
             loss_HM = F.cross_entropy(input=answers, target=feedback.to(torch.device(device)))
-            loss = loss_DR + loss_HM
+
+            # metric loss
+            # metrics_term = torch.round(model.)
+            # loss_metrics = 
+            
+            loss = loss_DR + loss_HM# + loss_metrics
             # print("train - loss_DR:{}, loss_HM:{}".format(loss_DR.item(), loss_HM.item()))
         
             train_loss.append((loss.item(), loss_DR.item(), loss_HM.item()))
@@ -169,5 +177,9 @@ def train_epoch_HM(model, criterion, optimizer, dataloader, epochs=20, device='c
         train_losses.append(np.mean(train_loss))
 
         print('HM - epoch: {}, loss: {}, lr: {}'.format(epoch, train_losses[-1], scheduler_HM.get_lr()[0]))
+
+        if epoch > 0:
+            if np.abs(train_losses[-1]-train_losses[-2])<1e-4:
+                break
 
     return model, train_losses
