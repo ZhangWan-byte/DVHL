@@ -1,4 +1,5 @@
 from .ResNet import *
+from .ScagModules import *
 
 import numpy as np
 
@@ -59,7 +60,7 @@ class AttnFusion(nn.Module):
 
 
 class HumanModel(nn.Module):
-    def __init__(self, cnn_layers=[1,1,1,1], metric_num=9, hidden_dim=10, device=torch.device('cuda')):
+    def __init__(self, cnn_layers=[1,1,1,1], metric_num=9, hidden_dim=10, device=torch.device('cuda'), batch_size=1024):
         super(HumanModel, self).__init__()
         
         self.hidden_dim = hidden_dim
@@ -69,6 +70,10 @@ class HumanModel(nn.Module):
         self.cnn = ResNet(BasicBlock, cnn_layers)
 
         # preference tower
+        self.scag_module = DAB(
+            approximator=ScagEstimator(size_in=batch_size, size_out=metric_num), 
+            hard_layer=ScagModule()
+        )
         self.mu = nn.Parameter(torch.zeros((metric_num, 1)))
         self.logvar = nn.Parameter(torch.log(torch.ones((metric_num, 1))))
         self.user_weights = nn.Parameter(torch.rand((metric_num, 1)))
@@ -192,7 +197,8 @@ class HumanModel(nn.Module):
         visual_feature = self.cnn(I_hat)                                    # feature for visual perception
 
         # preference tower
-        m = self.calc_metrics(z=z, labels=labels, x=x).view(1,-1)           # metric values
+        m = self.scag_module(z)                                             # metric values
+        # m = self.calc_metrics(z=z, labels=labels, x=x).view(1,-1)           # metric values
         d = self.reparameterise(self.mu, self.logvar).view(1,-1)            # random d for uncertainty
         w = F.sigmoid(self.user_weights).view(1,-1)                         # quasi-binary w for personal preference over metrics
         prod = m * d * w

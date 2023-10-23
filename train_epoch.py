@@ -62,7 +62,10 @@ def train_epoch_DR(model, criterion, optimizer, train_dataset, test_dataset, epo
             loss_HM = F.cross_entropy(input=answers, target=feedback.to(torch.device(device)))
 
             # metric loss
-            # metrics_term = torch.round(model.)
+            metrics_term = torch.round(model.user_weights)
+            for idx in range(len(metrics_term)):
+                if metrics_term[idx]>0.5:
+                    pass
             # loss_metrics = 
             
             loss = loss_DR + loss_HM# + loss_metrics
