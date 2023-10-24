@@ -86,3 +86,18 @@ def normalise(z):
         z = np.hstack([z0.reshape(-1,1), z1.reshape(-1,1)])
 
     return z
+
+
+def get_weights(x):
+    x = x.view(-1)
+
+    neg = F.tanh(x) < 0
+    neg = neg.type(torch.int64)
+
+    # pos = F.tanh(x) > 0
+    # pos = pos.type(torch.int64)
+    # pos *= -1
+
+    # return neg+pos
+
+    return neg

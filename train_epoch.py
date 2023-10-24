@@ -6,6 +6,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 from models import *
+from utils import get_weights
 
 
 def calc_multi_loss(answer, feedback):
@@ -112,7 +113,7 @@ def train_epoch_DR(model, criterion, optimizer, train_dataset, test_dataset, epo
 
         eval_losses.append((total_loss, DR_loss, HM_loss))
 
-        print('DR - epoch: {}, total train_loss: {}, total eval_loss: {}'.format(epoch, train_losses[-1], eval_losses[-1]))
+        print('DR - epoch: {}\ntotal train_loss: {}\ntotal eval_loss: {}'.format(epoch, train_losses[-1], eval_losses[-1]))
 
     return model, train_losses, eval_losses
 
