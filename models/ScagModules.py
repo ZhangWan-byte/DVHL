@@ -11,7 +11,7 @@ from metrics import scagnostics
 
 
 class DAB(nn.Module):
-    def __init__(self, approximator, hard_layer):
+    def __init__(self, approximator, hard_layer, device=torch.device('cuda')):
         """ DAB layer simply accepts an approximator model, a hard layer
             and adds syntatic sugar to return the hard output while caching
             the soft version. It also adds a helper fn loss_function() to
@@ -24,9 +24,10 @@ class DAB(nn.Module):
 
         """
         super(DAB, self).__init__()
+        self.device = device
         self.loss_fn = F.mse_loss
         self.hard_layer = hard_layer.apply
-        self.approximator = approximator
+        self.approximator = approximator.to(device)
 
     def loss_function(self):
         """ Simple helper to return the cached loss
@@ -39,7 +40,7 @@ class DAB(nn.Module):
         batch_size = self.true_output.shape[0]
         return torch.sum(self.loss_fn(self.approximator_output.view(batch_size, -1),
                                       self.true_output.view(batch_size, -1),
-                                      reduction='none'), dim=-1)
+                                      reduction='mean'), dim=-1)
 
     def forward(self, x, **kwargs):
         """ DAB layer simply caches the true and approximator outputs
@@ -51,7 +52,7 @@ class DAB(nn.Module):
 
         """
         self.approximator_output = self.approximator(x, **kwargs)
-        self.true_output = self.hard_layer(x, self.approximator_output)
+        self.true_output = self.hard_layer(x, self.approximator_output, self.device)
 
         # sanity check and return
         assert self.approximator_output.shape == self.true_output.shape, \
@@ -97,8 +98,8 @@ class BaseHardFn(torch.autograd.Function):
 
         """
         x, soft_y, *args = ctx.saved_tensors
-        print(x.shape, x.requires_grad)
-        print(soft_y.shape, soft_y.requires_grad)
+        # print(x.shape, x.requires_grad)
+        # print(soft_y.shape, soft_y.requires_grad)
         with torch.enable_grad():
             grad = torch.autograd.grad(outputs=soft_y, inputs=x,
                                        grad_outputs=grad_out,
@@ -126,8 +127,8 @@ class ScagEstimator(nn.Module):
         )
 
     def forward(self, z):
-        x = self.layerx(z[:, 0])
-        y = self.layery(z[:, 0])
+        x = self.layerx(z[:, 0].view(1,-1))
+        y = self.layery(z[:, 0].view(1,-1))
         out = x+y
         return out.view(1,-1)
 
@@ -145,7 +146,7 @@ class ScagModule(BaseHardFn):
 
         result_tensor = torch.tensor([list(all_scags.values())]).view(1,-1)
 
-        return result_tensor
+        return result_tensor.to(args[0])
 
     @staticmethod
     def forward(ctx, x, soft_y, *args):

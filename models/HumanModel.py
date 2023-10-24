@@ -60,7 +60,7 @@ class AttnFusion(nn.Module):
 
 
 class HumanModel(nn.Module):
-    def __init__(self, cnn_layers=[1,1,1,1], metric_num=9, hidden_dim=10, device=torch.device('cuda'), batch_size=1024):
+    def __init__(self, cnn_layers=[1,1,1,1], metric_num=9, hidden_dim=10, batch_size=1000, device=torch.device('cuda')):
         super(HumanModel, self).__init__()
         
         self.hidden_dim = hidden_dim
@@ -197,10 +197,11 @@ class HumanModel(nn.Module):
         visual_feature = self.cnn(I_hat)                                    # feature for visual perception
 
         # preference tower
-        m = self.scag_module(z)                                             # metric values
+        m = self.scag_module(z)                                              # metric values
         # m = self.calc_metrics(z=z, labels=labels, x=x).view(1,-1)           # metric values
         d = self.reparameterise(self.mu, self.logvar).view(1,-1)            # random d for uncertainty
         w = F.sigmoid(self.user_weights).view(1,-1)                         # quasi-binary w for personal preference over metrics
+        # print(m.device, d.device, w.device)
         prod = m * d * w
         user_preference = self.pref_mlp(prod)                               # feature for user preference
 

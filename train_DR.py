@@ -105,6 +105,7 @@ if __name__=='__main__':
         cnn_layers=[1,1,1,1], 
         VI_size=100, 
         freeze=(False, True), 
+        batch_size=args.batch_size_DR, 
         device=torch.device(args.device)
     )
 

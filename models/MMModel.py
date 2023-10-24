@@ -28,12 +28,12 @@ def normalise(z):
 
 
 class MMModel(nn.Module):
-    def __init__(self, MM_I_wPATH, MM_II_wPATH, cnn_layers=[1,1,1,1], VI_size=100, freeze=(False, False), device=torch.device('cuda')):
+    def __init__(self, MM_I_wPATH, MM_II_wPATH, cnn_layers=[1,1,1,1], VI_size=100, freeze=(False, False), batch_size=1000, device=torch.device('cuda')):
         super(MMModel, self).__init__()
 
         # configure MM_I and MM_II
         self.MM_I = Encoder(output_dim=2)
-        self.MM_II = HumanModel(cnn_layers=cnn_layers, metric_num=9, hidden_dim=10, device=device)
+        self.MM_II = HumanModel(cnn_layers=cnn_layers, metric_num=9, hidden_dim=10, batch_size=batch_size, device=device)
 
         if MM_I_wPATH != None or MM_II_wPATH != None:
             self.init_weights(MM_I_wPATH, MM_II_wPATH)

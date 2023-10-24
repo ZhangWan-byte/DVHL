@@ -120,7 +120,7 @@ def train_epoch_DR(model, criterion, optimizer, train_dataset, test_dataset, epo
     return model, train_losses, eval_losses
 
 
-def train_epoch_HM(model, criterion, optimizer, dataloader, epochs=20, device='cuda', scheduler_HM=None):
+def train_epoch_HM(model, criterion, optimizer, dataloader, epochs=20, device='cuda', scheduler_HM=None, dab_gamma=10):
     """train MM_II and freeze MM_I
 
     :param model: MM_II
@@ -141,18 +141,19 @@ def train_epoch_HM(model, criterion, optimizer, dataloader, epochs=20, device='c
         train_loss = []
         
         for X, y, feedback in tqdm(dataloader):
-            # print("feedback: ", feedback.shape)
+            
             optimizer.zero_grad()
-        
+            
+            X.requires_grad = True
             pred_z, pred_answers = model(x=X.to(torch.device(device)), labels=y.to(torch.device(device)))
-            # print("1 pred_z: {}\npred_answers: {}".format(pred_z.shape, pred_answers))
-            loss = criterion(input=pred_answers, target=feedback[0].squeeze().to(torch.device(device)))
-            # print("2 pred_z: {}\npred_answers: {}".format(pred_z.shape, pred_answers))
-
+            
+            loss_Qs = criterion(input=pred_answers, target=feedback[0].squeeze().to(torch.device(device)))
+            loss_DAB = model.MM_II.scag_module.loss_function().to(torch.device(device))
+            loss = loss_Qs + dab_gamma * loss_DAB
+            
             # loss_li = calc_multi_loss(answer=pred_answers, feedback=feedback[0].to(torch.device(device)))
 
-            train_loss.append(loss.item())
-            # print("loss_li, ", loss_li)
+            train_loss.append((loss.item(), loss_Qs.item(), loss_DAB.item()))
             
             loss.backward()
         
@@ -177,12 +178,16 @@ def train_epoch_HM(model, criterion, optimizer, dataloader, epochs=20, device='c
 
         if scheduler_HM!=None:
             scheduler_HM.step()
-        train_losses.append(np.mean(train_loss))
+
+        total_loss = np.mean([i[0] for i in train_loss])
+        Qs_loss = np.mean([i[1] for i in train_loss])
+        DAB_loss = np.mean([i[2] for i in train_loss])
+        train_losses.append((total_loss, Qs_loss, DAB_loss))
 
         print('HM - epoch: {}, loss: {}, lr: {}'.format(epoch, train_losses[-1], scheduler_HM.get_lr()[0]))
 
         if epoch > 0:
-            if np.abs(train_losses[-1]-train_losses[-2])<1e-4:
+            if np.abs(train_losses[-1][0]-train_losses[-2][0])<1e-4:
                 break
 
     return model, train_losses

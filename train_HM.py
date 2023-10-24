@@ -41,11 +41,14 @@ if __name__=='__main__':
     # training params
     parser.add_argument('--device', type=str, default='cuda', help='device cpu or cuda')
 
-    parser.add_argument('--batch_size_HM', type=int, default=1024, help='batch size - phase Human')
+    parser.add_argument('--batch_size_HM', type=int, default=1000, help='batch size - phase Human')
     parser.add_argument('--epochs_HM', type=int, default=100, help='training epochs - phase Human')
 
+    parser.add_argument('--dab_gamma', type=float, default=10, help="weight of dab loss")
+
     # data
-    parser.add_argument('--feedback_path', type=str, default=None, help='path of human feedback')
+    parser.add_argument('--feedback_path', type=str, default="./results/231016000038_I_0/feedback.pt", \
+        help='path of human feedback')
 
     # save path name
     parser.add_argument('--exp_dir', type=str, default=None, help='directory of this n-phase exp')
@@ -74,6 +77,7 @@ if __name__=='__main__':
         cnn_layers=[1,1,1,1], 
         VI_size=100, 
         freeze=(True, False), 
+        batch_size=args.batch_size_HM, 
         device=torch.device(args.device)
     )
 
@@ -97,7 +101,8 @@ if __name__=='__main__':
         optimizer_HM, 
         train_loader, 
         epochs=args.epochs_HM, 
-        scheduler_HM = scheduler_HM
+        scheduler_HM = scheduler_HM, 
+        dab_gamma = args.dab_gamma
     )
 
     torch.save(model.MM_II.state_dict(), os.path.join(result_path, 'HM_weights_{}.pt'.format(args.exp_name)))
