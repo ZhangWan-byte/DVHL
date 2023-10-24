@@ -70,7 +70,7 @@ if __name__=='__main__':
     else:
         result_path = "./results/{}/{}/".format(args.exp_dir, args.exp_name)
 
-    os.makedirs(result_path)
+    os.makedirs(result_path, exist_ok=True)
     print("saving dir: {}".format(result_path))
     with open(os.path.join(result_path, "args.json"), 'w') as f:
         json.dump(args.__dict__, f, indent=4)
