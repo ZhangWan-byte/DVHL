@@ -44,7 +44,7 @@ if __name__=='__main__':
     parser.add_argument('--batch_size_HM', type=int, default=1000, help='batch size - phase Human')
     parser.add_argument('--epochs_HM', type=int, default=100, help='training epochs - phase Human')
 
-    parser.add_argument('--dab_gamma', type=float, default=10, help="weight of dab loss")
+    parser.add_argument('--gamma_dab', type=float, default=10, help="weight of dab loss")
 
     # data
     parser.add_argument('--feedback_path', type=str, default="./results/231016000038_I_0/feedback.pt", \
@@ -102,7 +102,7 @@ if __name__=='__main__':
         train_loader, 
         epochs=args.epochs_HM, 
         scheduler_HM = scheduler_HM, 
-        dab_gamma = args.dab_gamma
+        gamma_dab = args.gamma_dab
     )
 
     torch.save(model.MM_II.state_dict(), os.path.join(result_path, 'HM_weights_{}.pt'.format(args.exp_name)))

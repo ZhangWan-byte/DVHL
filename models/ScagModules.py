@@ -115,12 +115,16 @@ class ScagEstimator(nn.Module):
         self.layerx = nn.Sequential(
             nn.Linear(size_in, size_hidden), 
             nn.ReLU(), 
+            nn.Linear(size_hidden, size_hidden), 
+            nn.ReLU(), 
             nn.Linear(size_hidden, size_out), 
             nn.ReLU()
         )
 
         self.layery = nn.Sequential(
             nn.Linear(size_in, size_hidden), 
+            nn.ReLU(), 
+            nn.Linear(size_hidden, size_hidden), 
             nn.ReLU(), 
             nn.Linear(size_hidden, size_out), 
             nn.ReLU()

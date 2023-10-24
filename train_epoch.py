@@ -120,7 +120,7 @@ def train_epoch_DR(model, criterion, optimizer, train_dataset, test_dataset, epo
     return model, train_losses, eval_losses
 
 
-def train_epoch_HM(model, criterion, optimizer, dataloader, epochs=20, device='cuda', scheduler_HM=None, dab_gamma=10):
+def train_epoch_HM(model, criterion, optimizer, dataloader, epochs=20, device='cuda', scheduler_HM=None, gamma_dab=10):
     """train MM_II and freeze MM_I
 
     :param model: MM_II
@@ -149,7 +149,7 @@ def train_epoch_HM(model, criterion, optimizer, dataloader, epochs=20, device='c
             
             loss_Qs = criterion(input=pred_answers, target=feedback[0].squeeze().to(torch.device(device)))
             loss_DAB = model.MM_II.scag_module.loss_function().to(torch.device(device))
-            loss = loss_Qs + dab_gamma * loss_DAB
+            loss = loss_Qs + gamma_dab * loss_DAB
             
             # loss_li = calc_multi_loss(answer=pred_answers, feedback=feedback[0].to(torch.device(device)))
 

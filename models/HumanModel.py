@@ -76,8 +76,10 @@ class HumanModel(nn.Module):
         )
         self.mu = nn.Parameter(torch.zeros((metric_num, 1)))
         self.logvar = nn.Parameter(torch.log(torch.ones((metric_num, 1))))
-        self.user_weights = nn.Parameter(torch.rand((metric_num, 1)))
+        self.user_weights = nn.Parameter(torch.zeros((metric_num, 1)))
         self.pref_mlp = nn.Sequential(
+            nn.Linear(metric_num, metric_num), 
+            nn.ReLU(), 
             nn.Linear(metric_num, metric_num), 
             nn.ReLU(), 
             nn.Linear(metric_num, metric_num), 
@@ -197,11 +199,25 @@ class HumanModel(nn.Module):
         visual_feature = self.cnn(I_hat)                                    # feature for visual perception
 
         # preference tower
-        m = self.scag_module(z)                                              # metric values
-        # m = self.calc_metrics(z=z, labels=labels, x=x).view(1,-1)           # metric values
-        d = self.reparameterise(self.mu, self.logvar).view(1,-1)            # random d for uncertainty
-        w = F.sigmoid(self.user_weights).view(1,-1)                         # quasi-binary w for personal preference over metrics
-        # print(m.device, d.device, w.device)
+        m = self.scag_module(z)                                             # metric values
+        d = self.reparameterise(self.mu, self.logvar).view(1,-1)            # crowd preference with random d for uncertainty
+
+        # maxw = torch.max(self.user_weights)
+        # minw = torch.min(self.user_weights)
+        # print("\nmaxw: {}\nminw: {}".format(maxw, minw))
+        # w = ((self.user_weights-minw)/(maxw-minw)).view(1,-1)               # personal preference over metrics
+        # print("weights: {}".format(self.user_weights))
+        # Qs_loss = NaN, maxw = minw = 0 at the beginning
+
+        # w = F.sigmoid(self.user_weights).view(1,-1)
+
+        # tanh allows different personal preference against crowd
+        w = F.tanh(self.user_weights).view(1,-1)
+
+        # w = F.softmax(self.user_weights / 0.1).view(1,-1)
+        # user_weights is always 0.5
+
+        # prod = m * F.softmax(d * w / 0.01)
         prod = m * d * w
         user_preference = self.pref_mlp(prod)                               # feature for user preference
 

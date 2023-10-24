@@ -56,9 +56,6 @@ if __name__=='__main__':
     parser.add_argument('--feedback_path', type=str, default="./results/231016000038_I_0/feedback.pt", \
         help='path of human feedback')
 
-    # parser.add_argument('--batch_size_HM', type=int, default=1, help='batch size - phase Human')
-    # parser.add_argument('--epochs_HM', type=int, default=100, help='training epochs - phase Human')
-
     # save path name
     parser.add_argument('--exp_dir', type=str, default=None, help='directory of this n-phase exp')
     parser.add_argument('--exp_name', type=str, help='name of this experiment, e.g., II-1')
