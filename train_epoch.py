@@ -55,20 +55,17 @@ def train_epoch_DR(model, criterion, optimizer, train_dataset, test_dataset, epo
 
             optimizer.zero_grad()
         
-            embedding_to, answers = model(batch_to, y_to)
-            embedding_from, answers = model(batch_from, y_from)
+            embedding_to, answers, pref_weights, pred_metrics = model(batch_to, y_to)
+            embedding_from, answers, pref_weights, pred_metrics = model(batch_from, y_from)
 
             loss_DR = criterion(embedding_to, embedding_from)
             loss_HM = F.cross_entropy(input=answers, target=feedback.to(torch.device(device)))
 
             # metric loss
-            metrics_term = torch.round(model.user_weights)
-            for idx in range(len(metrics_term)):
-                if metrics_term[idx]>0.5:
-                    pass
-            # loss_metrics = 
-            
-            loss = loss_DR + loss_HM# + loss_metrics
+            weights_metrics = get_weights(pref_weights)
+            loss_metrics = torch.mean(pred_metrics * weights_metrics)
+
+            loss = loss_DR + loss_HM + loss_metrics
             # print("train - loss_DR:{}, loss_HM:{}".format(loss_DR.item(), loss_HM.item()))
         
             train_loss.append((loss.item(), loss_DR.item(), loss_HM.item()))
@@ -95,8 +92,8 @@ def train_epoch_DR(model, criterion, optimizer, train_dataset, test_dataset, epo
 
             optimizer.zero_grad()
         
-            embedding_to, answers = model(batch_to, y_to)
-            embedding_from, answers = model(batch_from, y_from)
+            embedding_to, answers, pref_weights, pred_metrics = model(batch_to, y_to)
+            embedding_from, answers, pref_weights, pred_metrics = model(batch_from, y_from)
         
             loss_DR = criterion(embedding_to, embedding_from)
             loss_HM = F.cross_entropy(input=answers, target=feedback.to(torch.device(device)))
@@ -145,7 +142,7 @@ def train_epoch_HM(model, criterion, optimizer, dataloader, epochs=20, device='c
             optimizer.zero_grad()
             
             X.requires_grad = True
-            pred_z, pred_answers = model(x=X.to(torch.device(device)), labels=y.to(torch.device(device)))
+            pred_z, pred_answers, pref_weights, pred_metrics = model(x=X.to(torch.device(device)), labels=y.to(torch.device(device)))
             
             loss_Qs = criterion(input=pred_answers, target=feedback[0].squeeze().to(torch.device(device)))
             loss_DAB = model.MM_II.scag_module.loss_function().to(torch.device(device))

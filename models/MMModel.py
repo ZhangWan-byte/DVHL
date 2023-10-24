@@ -74,7 +74,7 @@ class MMModel(nn.Module):
         I_hat = I_hat.permute(2,1,0).unsqueeze(0)
         # print("I_hat: ", I_hat.shape)
 
-        answers = self.MM_II(I_hat=I_hat, z=z, labels=labels, x=x)
+        answers, pref_weights, pred_metrics = self.MM_II(I_hat=I_hat, z=z, labels=labels, x=x)
         # print("answers: ", answers.shape)
         
-        return z, answers
+        return z, answers, pref_weights, pred_metrics

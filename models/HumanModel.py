@@ -218,7 +218,8 @@ class HumanModel(nn.Module):
         # user_weights is always 0.5
 
         # prod = m * F.softmax(d * w / 0.01)
-        prod = m * d * w
+        pref_weights = d * w
+        prod = m * pref_weights
         user_preference = self.pref_mlp(prod)                               # feature for user preference
 
         # feature fusion
@@ -233,4 +234,4 @@ class HumanModel(nn.Module):
 
         answers = torch.vstack([a1, a2, a3, a4])
 
-        return answers
+        return answers, pref_weights, m
