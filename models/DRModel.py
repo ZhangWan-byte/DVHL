@@ -15,7 +15,7 @@ import torch.nn.functional as F
 from torch.autograd import Function
 
 
-class PCA(nn.Module):
+class myPCA(nn.Module):
     def __init__(self, n_components=2):
         super(PCA, self).__init__()
         self.n_components = n_components
