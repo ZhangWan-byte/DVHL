@@ -27,7 +27,7 @@ def draw_Ihat(I_hat):
     plt.show()
 
 
-def draw_z(z, cls, s=25, x_highlight=None, y_highlight=None, save_path=None, display=True):
+def draw_z(z, cls, s=25, x_highlight=None, y_highlight=None, save_path=None, display=True, title=None):
     """draw data and labels
 
     :param z: (n, 2) -- 2D data
@@ -62,6 +62,9 @@ def draw_z(z, cls, s=25, x_highlight=None, y_highlight=None, save_path=None, dis
     
     if save_path!=None:
         plt.savefig(save_path)
+
+    if title!=None:
+        plt.title(title)
 
     if display==True:
         plt.show()
@@ -101,3 +104,12 @@ def get_weights(x):
     # return neg+pos
 
     return neg
+
+
+def rotate_anticlockwise(z):
+    R = np.array([[0, -1],
+                  [1, 0]])
+    z1 = np.dot(R, z.T).T
+    z1 = normalise(z1)
+
+    return z
