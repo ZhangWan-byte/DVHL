@@ -107,10 +107,22 @@ def get_weights(x):
 
 
 def rotate_anticlockwise(z, times=1):
-    R = np.array([[0, -1],
-                  [1, 0]])
-    for i in range(times):
-        z = np.dot(R, z.T).T
+
+    if type(z)==type(np.ones(1)):
+        R = np.array([[0, -1],
+                    [1, 0]])
+        for i in range(times):
+            z = np.dot(R, z.T).T
+    
+    elif type(z)==type(torch.ones(1)):
+        R = torch.Tensor([[0, -1], 
+                          [1, 0]])
+        for i in range(times):
+            z = torch.matmul(R, z.T).T
+
+    else:
+        print("not implemented rotation")
+        exit()
 
     z = normalise(z)
 
