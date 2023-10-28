@@ -106,10 +106,12 @@ def get_weights(x):
     return neg
 
 
-def rotate_anticlockwise(z):
+def rotate_anticlockwise(z, times=1):
     R = np.array([[0, -1],
                   [1, 0]])
-    z1 = np.dot(R, z.T).T
-    z1 = normalise(z1)
+    for i in range(times):
+        z = np.dot(R, z.T).T
+
+    z = normalise(z)
 
     return z
