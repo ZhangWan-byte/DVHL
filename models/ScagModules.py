@@ -132,7 +132,7 @@ class ScagEstimator(nn.Module):
 
     def forward(self, z):
         x = self.layerx(z[:, 0].view(1,-1))
-        y = self.layery(z[:, 0].view(1,-1))
+        y = self.layery(z[:, 1].view(1,-1))
         out = x+y
         return out.view(1,-1)
 
