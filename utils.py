@@ -73,22 +73,49 @@ def draw_z(z, cls, s=25, x_highlight=None, y_highlight=None, save_path=None, dis
         plt.close()
 
 
-def normalise(z):
+# def normalise(z):
+#     """normalise coordinates to 0~1
+
+#     :param z: normalised coordinates
+#     """
+#     if type(z) == type(torch.ones(1)):
+#         z0 = (z[:,0] - torch.min(z[:,0])) / (torch.max(z[:,0]) - torch.min(z[:,0]))
+#         z1 = (z[:,1] - torch.min(z[:,1])) / (torch.max(z[:,1]) - torch.min(z[:,1]))
+#         z = torch.hstack([z0.reshape(-1,1), z1.reshape(-1,1)])
+    
+#     if type(z) == type(np.ones(1)):
+#         z0 = (z[:,0] - np.min(z[:,0])) / (np.max(z[:,0]) - np.min(z[:,0]))
+#         z1 = (z[:,1] - np.min(z[:,1])) / (np.max(z[:,1]) - np.min(z[:,1]))
+#         z = np.hstack([z0.reshape(-1,1), z1.reshape(-1,1)])
+
+#     return z
+
+def normalise_(zx, zy):
     """normalise coordinates to 0~1
 
     :param z: normalised coordinates
     """
-    if type(z) == type(torch.ones(1)):
-        z0 = (z[:,0] - torch.min(z[:,0])) / (torch.max(z[:,0]) - torch.min(z[:,0]))
-        z1 = (z[:,1] - torch.min(z[:,1])) / (torch.max(z[:,1]) - torch.min(z[:,1]))
+    if type(zx) == type(torch.ones(1)):
+        z0 = (zx - torch.min(zx)) / (torch.max(zx) - torch.min(zx))
+        z1 = (zy - torch.min(zy)) / (torch.max(zy) - torch.min(zy))
         z = torch.hstack([z0.reshape(-1,1), z1.reshape(-1,1)])
     
-    if type(z) == type(np.ones(1)):
-        z0 = (z[:,0] - np.min(z[:,0])) / (np.max(z[:,0]) - np.min(z[:,0]))
-        z1 = (z[:,1] - np.min(z[:,1])) / (np.max(z[:,1]) - np.min(z[:,1]))
+    if type(zx) == type(np.ones(1)):
+        z0 = (zx - np.min(zx)) / (np.max(zx) - np.min(zx))
+        z1 = (zy - np.min(zy)) / (np.max(zy) - np.min(zy))
         z = np.hstack([z0.reshape(-1,1), z1.reshape(-1,1)])
 
     return z
+
+def normalise(z):
+
+    if len(z.shape)==2:
+        return normalise_(z[:,0], z[:,1])
+    elif len(z.shape)==3:
+        res_li = []
+        for i in range(len(z)):
+            res_li.append(normalise_(z[i,:,0].squeeze(), z[i,:,1].squeeze()))
+        return torch.stack(res_li, dim=0)
 
 
 def get_weights(x):
@@ -108,17 +135,16 @@ def get_weights(x):
 
 def rotate_anticlockwise(z, times=1):
 
+    R = torch.Tensor([[0, -1], 
+                      [1, 0]])
+
     if type(z)==type(np.ones(1)):
-        R = np.array([[0, -1],
-                    [1, 0]])
         for i in range(times):
-            z = np.dot(R, z.T).T
+            z = np.dot(z, R)
     
     elif type(z)==type(torch.ones(1)):
-        R = torch.Tensor([[0, -1], 
-                          [1, 0]])
         for i in range(times):
-            z = torch.matmul(R, z.T).T
+            z = torch.matmul(z, R)
 
     else:
         print("not implemented rotation")

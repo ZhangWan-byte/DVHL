@@ -118,7 +118,7 @@ class VisualImitation(nn.Module):
         :param labels: [N, 1] - data class
         """
         
-        z = torch.hstack([z, labels.view(-1,1)])
+        z = torch.hstack([z, labels.view(z.shape[0], 1)])
 
         I_hat_single = self.get_I_hat_single(z)
         # I_hat_single.register_hook(save_grad('I_hat_single'))

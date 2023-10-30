@@ -35,7 +35,8 @@ if __name__=='__main__':
     # arguments
     parser = argparse.ArgumentParser()
     parser.add_argument('--train', type=str, default='HM', help="train DR or HM")
-    parser.add_argument('--MM_I_wPATH', type=str, default="./results/DR_weights.pt", help='weights to initialise DR model')
+    parser.add_argument('--MM_I_wPATH', type=str, default="./data/pretrain_results/DR_weights.pt", \
+        help='weights to initialise DR model')
     parser.add_argument('--MM_II_wPATH', type=str, default=None, help='weights to initialise human model')
     
     # training params

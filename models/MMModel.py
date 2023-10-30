@@ -66,15 +66,15 @@ class MMModel(nn.Module):
     def forward(self, x, labels=None):
                
         z = self.MM_I(x)
-        # print("z: ", z.shape)
+        print("z: ", z.shape)
         
         I_hat = self.VI(z=normalise(z), labels=labels)
-        # print("I_hat: ", I_hat.shape)
+        print("I_hat: ", I_hat.shape)
         
         I_hat = I_hat.permute(2,1,0).unsqueeze(0)
-        # print("I_hat: ", I_hat.shape)
+        print("I_hat: ", I_hat.shape)
 
         answers, pref_weights, pred_metrics = self.MM_II(I_hat=I_hat, z=z, labels=labels, x=x)
-        # print("answers: ", answers.shape)
+        print("answers: ", answers.shape)
         
         return z, answers, pref_weights, pred_metrics
