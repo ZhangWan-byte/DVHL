@@ -93,16 +93,17 @@ def normalise_(zx, zy):
 def normalise(z):
 
     if len(z.shape)==2:
-        return normalise_(z[:,0], z[:,1])
+        z = normalise_(z[:,0], z[:,1])
     elif len(z.shape)==3:
         res_li = []
         for i in range(len(z)):
             res_li.append(normalise_(z[i,:,0].squeeze(), z[i,:,1].squeeze()))
-        return torch.stack(res_li, dim=0)
+        z = torch.stack(res_li, dim=0)
     else:
         print("wrong z.shape")
         exit()
 
+    return z
 
 def get_weights(x):
     x = x.view(-1)
