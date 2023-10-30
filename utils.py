@@ -73,23 +73,6 @@ def draw_z(z, cls, s=25, x_highlight=None, y_highlight=None, save_path=None, dis
         plt.close()
 
 
-# def normalise(z):
-#     """normalise coordinates to 0~1
-
-#     :param z: normalised coordinates
-#     """
-#     if type(z) == type(torch.ones(1)):
-#         z0 = (z[:,0] - torch.min(z[:,0])) / (torch.max(z[:,0]) - torch.min(z[:,0]))
-#         z1 = (z[:,1] - torch.min(z[:,1])) / (torch.max(z[:,1]) - torch.min(z[:,1]))
-#         z = torch.hstack([z0.reshape(-1,1), z1.reshape(-1,1)])
-    
-#     if type(z) == type(np.ones(1)):
-#         z0 = (z[:,0] - np.min(z[:,0])) / (np.max(z[:,0]) - np.min(z[:,0]))
-#         z1 = (z[:,1] - np.min(z[:,1])) / (np.max(z[:,1]) - np.min(z[:,1]))
-#         z = np.hstack([z0.reshape(-1,1), z1.reshape(-1,1)])
-
-#     return z
-
 def normalise_(zx, zy):
     """normalise coordinates to 0~1
 
@@ -116,6 +99,9 @@ def normalise(z):
         for i in range(len(z)):
             res_li.append(normalise_(z[i,:,0].squeeze(), z[i,:,1].squeeze()))
         return torch.stack(res_li, dim=0)
+    else:
+        print("wrong z.shape")
+        exit()
 
 
 def get_weights(x):
