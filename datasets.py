@@ -1,4 +1,5 @@
 # https://github.com/SKvtun/ParametricUMAP-Pytorch
+import os
 import random
 import numpy as np
 

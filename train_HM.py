@@ -101,7 +101,8 @@ if __name__=='__main__':
         epochs=args.epochs_HM, 
         scheduler_HM = scheduler_HM, 
         gamma_dab = args.gamma_dab, 
-        args=args
+        args=args, 
+        result_path=result_path
     )
 
     torch.save(model.MM_II.state_dict(), os.path.join(result_path, 'HM_weights_{}.pt'.format(args.exp_name)))
