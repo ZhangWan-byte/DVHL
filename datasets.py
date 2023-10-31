@@ -173,12 +173,12 @@ class FeedbackDataset(Dataset):
         return z, y, s, F.one_hot(f, num_classes=5).squeeze().float()
 
 
-def get_feedback_loader(path="./data/pretrain_data/"):
+def get_feedback_loader(path="./data/pretrain_data/", batch_size=1):
     
     data_list = os.listdir(path)
     names = [os.path.join(path, i) for i in os.listdir(path=path)]
 
     testing_set = FeedbackDataset(data_list=names)
-    feedback_loader = DataLoader(testing_set, batch_size=1, shuffle=False)
+    feedback_loader = DataLoader(testing_set, batch_size=batch_size, shuffle=False)
 
     return feedback_loader

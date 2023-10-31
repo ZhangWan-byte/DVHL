@@ -69,9 +69,10 @@ def train_epoch_DR(model, criterion, optimizer, train_dataset, test_dataset, epo
             weights_metrics = get_weights(pref_weights)
             loss_metrics = torch.mean(pred_metrics * weights_metrics)
 
-            loss = loss_DR + loss_HM # + loss_metrics
+            # loss = 0.3*loss_DR + 0.7*loss_HM # + loss_metrics
+            loss = 0.2*loss_DR + 0.4*loss_HM + 0.4*loss_metrics
         
-            train_loss.append((loss.item(), loss_DR.item(), loss_HM.item()))
+            train_loss.append((loss.item(), loss_DR.item(), loss_HM.item(), loss_metrics.item()))
         
             loss.backward()
         
@@ -80,10 +81,14 @@ def train_epoch_DR(model, criterion, optimizer, train_dataset, test_dataset, epo
         total_loss = np.mean([i[0] for i in train_loss])
         DR_loss = np.mean([i[1] for i in train_loss])
         HM_loss = np.mean([i[2] for i in train_loss])
+        Metrics_loss = np.mean([i[3] for i in train_loss])
 
-        train_losses.append((total_loss, DR_loss, HM_loss))
+        train_losses.append((total_loss, DR_loss, HM_loss, Metrics_loss))
 
-        print('epoch: {}, loss: {}, '.format(epoch, train_losses))
+        print('DR - train epoch: {}, total loss: {}, DR loss: {}, HM_loss: {}, Metrics_loss: {}'.format(
+            epoch, train_losses[-1][0], train_losses[-1][1], train_losses[-1][2], train_losses[-1][3]))
+        # print('epoch: {}, total loss: {}, DR loss: {}, HM_loss: {}'.format(
+            # epoch, train_losses[-1][0], train_losses[-1][1], train_losses[-1][2]))
 
         # evaluate
         with torch.no_grad():
@@ -104,18 +109,25 @@ def train_epoch_DR(model, criterion, optimizer, train_dataset, test_dataset, epo
             
                 loss_DR = criterion(embedding_to, embedding_from)
                 loss_HM = F.cross_entropy(input=answers, target=feedback.to(torch.device(device)))
-                loss = loss_DR + loss_HM
-                # print("eval - loss_DR:{}, loss_HM:{}".format(loss_DR.item(), loss_HM.item()))
+                
+                # metric loss
+                weights_metrics = get_weights(pref_weights)
+                loss_metrics = torch.mean(pred_metrics * weights_metrics)
+
+                loss = 0.2*loss_DR + 0.4*loss_HM + 0.4*loss_metrics
             
-                eval_loss.append((loss.item(), loss_DR.item(), loss_HM.item()))
+                eval_loss.append((loss.item(), loss_DR.item(), loss_HM.item(), loss_metrics.item()))
 
             total_loss = np.mean([i[0] for i in eval_loss])
             DR_loss = np.mean([i[1] for i in eval_loss])
             HM_loss = np.mean([i[2] for i in eval_loss])
+            Metrics_loss = np.mean([i[3] for i in eval_loss])
 
-            eval_losses.append((total_loss, DR_loss, HM_loss))
+            eval_losses.append((total_loss, DR_loss, HM_loss, Metrics_loss))
 
-            print('DR - epoch: {}\ntotal train_loss: {}\ntotal eval_loss: {}'.format(epoch, train_losses[-1], eval_losses[-1]))
+            # print('DR - eval epoch: {}\ntotal train_loss: {}\ntotal eval_loss: {}'.format(epoch, train_losses[-1], eval_losses[-1]))
+            print('DR - eval epoch: {}, total loss: {}, DR loss: {}, HM_loss: {}, Metrics_loss: {}'.format(
+                epoch, eval_losses[-1][0], eval_losses[-1][1], eval_losses[-1][2], eval_losses[-1][3]))
 
         model.train()
 
@@ -131,7 +143,7 @@ def train_epoch_HM(model, criterion, optimizer, dataloader, epochs=20, device='c
     """
 
     # get feedback test_dataloader
-    test_dataloader = get_feedback_loader()
+    test_dataloader = get_feedback_loader(batch_size=1)
 
     # recording variables
     best_train_loss = 10.0
