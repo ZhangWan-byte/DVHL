@@ -1,7 +1,8 @@
 # https://github.com/SKvtun/ParametricUMAP-Pytorch
-import torch
+import random
 import numpy as np
 
+import torch
 import torchvision as tv
 import torchvision.transforms as transforms
 from torch.autograd import Variable
@@ -156,3 +157,27 @@ def get_dataset(args, data='MNIST', DR='UMAP'):
     else:
         print("wrong args.train!")
         exit()
+
+
+class FeedbackDataset(Dataset):
+    def __init__(self, data_list):
+        self.data_list = data_list
+
+    def __len__(self):
+        return len(self.data_list)
+
+    def __getitem__(self, idx):
+        z, y, s, f = torch.load(self.data_list[idx])
+
+        return z, y, s, F.one_hot(f, num_classes=5).squeeze().float()
+
+
+def get_feedback_loader(path="./data/pretrain_data/"):
+    
+    data_list = os.listdir(path)
+    names = [os.path.join(path, i) for i in os.listdir(path=path)]
+
+    testing_set = FeedbackDataset(data_list=names)
+    feedback_loader = DataLoader(testing_set, batch_size=1, shuffle=False)
+
+    return feedback_loader

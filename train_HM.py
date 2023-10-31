@@ -37,7 +37,8 @@ if __name__=='__main__':
     parser.add_argument('--train', type=str, default='HM', help="train DR or HM")
     parser.add_argument('--MM_I_wPATH', type=str, default="./data/pretrain_results/DR_weights.pt", \
         help='weights to initialise DR model')
-    parser.add_argument('--MM_II_wPATH', type=str, default=None, help='weights to initialise human model')
+    parser.add_argument('--MM_II_wPATH', type=str, default="./data/pretrain_results/HM_weights.pt", \
+        help='weights to initialise human model')
     
     # training params
     parser.add_argument('--device', type=str, default='cuda', help='device cpu or cuda')
@@ -84,10 +85,6 @@ if __name__=='__main__':
 
     # get dataloader
     train_loader, test_loader = get_dataset(args=args, data='MNIST', DR='UMAP')
-    # for X, y, feedback in tqdm(train_loader):
-    #     break
-
-    # print(X.shape, y.shape, feedback.shape)
 
     # loss function
     criterion_HM = nn.CrossEntropyLoss()
@@ -96,16 +93,17 @@ if __name__=='__main__':
     optimizer_HM = torch.optim.Adam(model.MM_II.parameters(), lr=1e-4)
     scheduler_HM =torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_HM, T_max=args.epochs_HM, eta_min=1e-8)
 
-    model, train_losses = train_epoch_HM(
+    model, train_losses, test_losses = train_epoch_HM(
         model, 
         criterion_HM, 
         optimizer_HM, 
         train_loader, 
         epochs=args.epochs_HM, 
         scheduler_HM = scheduler_HM, 
-        gamma_dab = args.gamma_dab
+        gamma_dab = args.gamma_dab, 
+        args=args
     )
 
     torch.save(model.MM_II.state_dict(), os.path.join(result_path, 'HM_weights_{}.pt'.format(args.exp_name)))
     torch.save(torch.tensor(train_losses), os.path.join(result_path, 'train_losses_{}.pt'.format(args.exp_name)))
-    
+    torch.save(torch.tensor(test_losses), os.path.join(result_path, 'test_losses_{}.pt'.format(args.exp_name)))

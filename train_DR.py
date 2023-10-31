@@ -38,7 +38,8 @@ if __name__=='__main__':
     parser.add_argument('--train', type=str, default='DR', help="train DR or HM")
     parser.add_argument('--MM_I_wPATH', type=str, default="./data/pretrain_results/DR_weights.pt", \
         help='weights to initialise DR model')
-    parser.add_argument('--MM_II_wPATH', type=str, default=None, help='weights to initialise human model')
+    parser.add_argument('--MM_II_wPATH', type=str, default="./data/pretrain_results/HM_weights.pt", \
+        help='weights to initialise human model')
     parser.add_argument('--DR', type=str, default="UMAP", help='UMAP or t-SNE')
     
     # UMAP hyper-params
