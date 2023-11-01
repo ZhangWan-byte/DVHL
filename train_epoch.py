@@ -161,6 +161,10 @@ def train_epoch_HM(model, criterion, optimizer, dataloader, epochs=20, device='c
             param.requires_grad = False
         for param in model.MM_II.parameters():
             param.requires_grad = True
+        
+        # fix crowd preference, only learn personal
+        model.MM_II.mu.requires_grad = False
+        model.MM_II.logvar.requires_grad = False
 
         # training
         train_loss = []

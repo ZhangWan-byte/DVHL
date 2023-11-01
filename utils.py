@@ -108,16 +108,19 @@ def normalise(z):
 def get_weights(x):
     x = x.view(-1)
 
-    neg = F.tanh(x) < 0
-    neg = neg.type(torch.int64)
+    # neg = F.tanh(x) < 0
+    # neg = neg.type(torch.int64)
 
     # pos = F.tanh(x) > 0
     # pos = pos.type(torch.int64)
     # pos *= -1
-
     # return neg+pos
 
-    return neg
+    x = (x - torch.mean(x)) / torch.std(x)
+
+    x = x * (-1)
+
+    return x
 
 
 def rotate_anticlockwise(z, times=1):
