@@ -22,7 +22,7 @@ class UMAPDataset:
         create dataset for iteration on graph edges
 
         """
-        self.weigh = weight
+        self.weight = weight
         self.batch_size = batch_size
         self.data = data
         self.labels = labels
