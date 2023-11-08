@@ -17,7 +17,7 @@ from torch.autograd import Function
 
 class myPCA(nn.Module):
     def __init__(self, n_components=2):
-        super(PCA, self).__init__()
+        super(myPCA, self).__init__()
         self.n_components = n_components
 
     def forward(self, X):
@@ -27,7 +27,7 @@ class myPCA(nn.Module):
         X = X - self.mean
 
         covariance_matrix = 1 / n * torch.matmul(X.T, X)
-        eigenvalues, eigenvectors = torch.eig(covariance_matrix, eigenvectors=True)
+        eigenvalues, eigenvectors = torch.linalg.eig(covariance_matrix)
         eigenvalues = torch.norm(eigenvalues, dim=1)
         idx = torch.argsort(-eigenvalues)
         eigenvectors = eigenvectors[:, idx]
