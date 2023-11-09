@@ -79,14 +79,18 @@ def normalise_(zx, zy):
     :param z: normalised coordinates
     """
     if type(zx) == type(torch.ones(1)):
-        z0 = (zx - torch.min(zx)) / (torch.max(zx) - torch.min(zx))
-        z1 = (zy - torch.min(zy)) / (torch.max(zy) - torch.min(zy))
-        z = torch.hstack([z0.reshape(-1,1), z1.reshape(-1,1)])
+        if torch.min(zx)!=torch.max(zx):
+            zx = (zx - torch.min(zx)) / (torch.max(zx) - torch.min(zx))
+        if torch.min(zy)!=torch.max(zy):
+            zy = (zy - torch.min(zy)) / (torch.max(zy) - torch.min(zy))
+        z = torch.hstack([zx.reshape(-1,1), zy.reshape(-1,1)])
     
     if type(zx) == type(np.ones(1)):
-        z0 = (zx - np.min(zx)) / (np.max(zx) - np.min(zx))
-        z1 = (zy - np.min(zy)) / (np.max(zy) - np.min(zy))
-        z = np.hstack([z0.reshape(-1,1), z1.reshape(-1,1)])
+        if np.min(zx)!=np.max(zx):
+            zx = (zx - np.min(zx)) / (np.max(zx) - np.min(zx))
+        if np.min(zy)!=np.max(zy):
+            zy = (zy - np.min(zy)) / (np.max(zy) - np.min(zy))
+        z = np.hstack([zx.reshape(-1,1), zy.reshape(-1,1)])
 
     return z
 
