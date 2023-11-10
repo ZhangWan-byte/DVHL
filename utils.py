@@ -147,3 +147,37 @@ def rotate_anticlockwise(z, times=1):
     z = normalise(z)
 
     return z
+
+
+# ordinal loss
+def ord_loss(logits, labels):
+    num_classes = 5
+    dist_matrix = torch.tensor([
+        [0, 1, 2, 3, 4], 
+        [4, 0, 1, 2, 3], 
+        [3, 4, 0, 1, 2], 
+        [2, 3, 4, 0, 1], 
+        [4, 3, 2, 1, 0]
+    ])
+
+    # labels = torch.tensor([2, 3, 4, 4])
+
+    # logits = torch.logit(torch.tensor([
+    #     [0.1, 0.1, 0.6, 0.1, 0.1], 
+    #     [0.1, 0.1, 0.6, 0.1, 0.1], 
+    #     [0.1, 0.1, 0.6, 0.1, 0.1], 
+    #     [0.025, 0.025, 0.025, 0.025, 0.9]
+    # ]))
+
+    probas = F.softmax(logits, dim=1).cuda()
+
+    true_labels = [num_classes*[labels[k].item()] for k in range(len(labels))]
+    label_ids = len(labels)*[[k for k in range(num_classes)]]
+
+    distances = [[dist_matrix[true_labels[j][i]][label_ids[j][i]]/np.sum([dist_matrix[n][label_ids[j][i]] for n in range(num_classes)]) for i in range(num_classes)] for j in range(len(labels))]
+    distances_tensor = torch.tensor(distances,device='cuda:0', requires_grad=True)
+
+    err = -torch.log(1-probas)*abs(distances_tensor)**1.5
+    loss = torch.sum(err,axis=1).mean()
+
+    return loss
