@@ -150,7 +150,7 @@ def rotate_anticlockwise(z, times=1):
 
 
 # ordinal loss
-# adapted from https://github.com/glanceable-io/ordinal-log-loss
+# adapted from https://github.com/glanceable-io/ordinal-log-loss/blob/main/src/loss_functions.py
 def ord_loss(logits, labels, alpha=1.5):
     num_classes = 5
     dist_matrix = torch.tensor([

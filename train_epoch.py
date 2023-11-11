@@ -11,7 +11,7 @@ from datasets import *
 
 
 # epoch training for dimensinality reduction
-def train_epoch_DR(model, criterion, optimizer, train_dataset, test_dataset, epochs=20, device='cuda', result_path=None):
+def train_epoch_DR(model, criterion, optimizer, train_dataset, test_dataset, epochs=20, device='cuda', result_path=None, alpha=0.3):
     """train MM_I and freeze MM_II
 
     :param model: MMModel
@@ -66,7 +66,7 @@ def train_epoch_DR(model, criterion, optimizer, train_dataset, test_dataset, epo
             # # loss = 0.3*loss_DR + 0.7*loss_HM # + loss_metrics
             # loss = 0.2*loss_DR + 0.4*loss_HM + 0.4*loss_metrics
 
-            loss = loss_DR + loss_HM
+            loss = alpha * loss_DR + (1-alpha) * loss_HM
         
             # train_loss.append((loss.item(), loss_DR.item(), loss_HM.item(), loss_metrics.item()))
             train_loss.append((loss_DR.item(), loss_HM.item()))
@@ -125,7 +125,7 @@ def train_epoch_DR(model, criterion, optimizer, train_dataset, test_dataset, epo
 
             print('DR eval - epoch: {}, DR loss: {}, HM_loss: {}'.format(epoch, eval_losses[-1][0], eval_losses[-1][1]))
 
-            if sum(eval_losses[-1]) < sum(best_eval_losses):
+            if (alpha * eval_losses[-1][0] + (1-alpha) * eval_losses[-1][1]) < sum(best_eval_losses):
                 torch.save(model.MM_I.state_dict(), os.path.join(result_path, 'DR_weights_epoch{}.pt'.format(epoch)))
                 best_epoch = epoch
                 best_eval_losses = eval_losses[-1]
