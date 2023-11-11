@@ -150,7 +150,8 @@ def rotate_anticlockwise(z, times=1):
 
 
 # ordinal loss
-def ord_loss(logits, labels):
+# adapted from https://github.com/glanceable-io/ordinal-log-loss
+def ord_loss(logits, labels, alpha=1.5):
     num_classes = 5
     dist_matrix = torch.tensor([
         [0, 1, 2, 3, 4], 
@@ -177,7 +178,7 @@ def ord_loss(logits, labels):
     distances = [[dist_matrix[true_labels[j][i]][label_ids[j][i]]/np.sum([dist_matrix[n][label_ids[j][i]] for n in range(num_classes)]) for i in range(num_classes)] for j in range(len(labels))]
     distances_tensor = torch.tensor(distances,device='cuda:0', requires_grad=True)
 
-    err = -torch.log(1-probas)*abs(distances_tensor)**1.5
+    err = -torch.log(1-probas)*abs(distances_tensor)**alpha
     loss = torch.sum(err,axis=1).mean()
 
     return loss

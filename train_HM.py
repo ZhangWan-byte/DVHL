@@ -105,6 +105,6 @@ if __name__=='__main__':
         result_path=result_path
     )
 
-    torch.save(model.MM_II.state_dict(), os.path.join(result_path, 'HM_weights_{}.pt'.format(args.exp_name)))
+    # torch.save(model.MM_II.state_dict(), os.path.join(result_path, 'HM_weights_{}.pt'.format(args.exp_name)))
     torch.save(torch.tensor(train_losses), os.path.join(result_path, 'train_losses_{}.pt'.format(args.exp_name)))
     torch.save(torch.tensor(test_losses), os.path.join(result_path, 'test_losses_{}.pt'.format(args.exp_name)))

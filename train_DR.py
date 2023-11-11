@@ -123,7 +123,7 @@ if __name__=='__main__':
         epochs=args.epochs_DR
     )
 
-    torch.save(model.MM_I.state_dict(), os.path.join(result_path, 'DR_weights_{}.pt'.format(args.exp_name)))
+    # torch.save(model.MM_I.state_dict(), os.path.join(result_path, 'DR_weights_{}.pt'.format(args.exp_name)))
     torch.save(torch.tensor(train_losses), os.path.join(result_path, 'train_losses_{}.pt'.format(args.exp_name)))
     torch.save(torch.tensor(eval_losses), os.path.join(result_path, 'eval_losses_{}.pt'.format(args.exp_name)))
     
