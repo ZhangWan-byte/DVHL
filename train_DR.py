@@ -120,7 +120,8 @@ if __name__=='__main__':
         optimizer=optimizer_DR, 
         train_dataset=train_dataset, 
         test_dataset=test_dataset, 
-        epochs=args.epochs_DR
+        epochs=args.epochs_DR, 
+        result_path=result_path
     )
 
     # torch.save(model.MM_I.state_dict(), os.path.join(result_path, 'DR_weights_{}.pt'.format(args.exp_name)))

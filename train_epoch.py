@@ -11,7 +11,7 @@ from datasets import *
 
 
 # epoch training for dimensinality reduction
-def train_epoch_DR(model, criterion, optimizer, train_dataset, test_dataset, epochs=20, device='cuda'):
+def train_epoch_DR(model, criterion, optimizer, train_dataset, test_dataset, epochs=20, device='cuda', result_path=None):
     """train MM_I and freeze MM_II
 
     :param model: MMModel
@@ -25,7 +25,7 @@ def train_epoch_DR(model, criterion, optimizer, train_dataset, test_dataset, epo
 
     # recording variables
     best_train_loss = (10.0, 10.0)
-    best_test_loss = (10.0, 10.0)
+    best_eval_losses = (10.0, 10.0)
     best_epoch = 0
 
     train_losses = []
@@ -125,15 +125,15 @@ def train_epoch_DR(model, criterion, optimizer, train_dataset, test_dataset, epo
 
             print('DR eval - epoch: {}, DR loss: {}, HM_loss: {}'.format(epoch, eval_losses[-1][0], eval_losses[-1][1]))
 
-            if sum(test_losses[-1]) < sum(best_test_loss):
-                torch.save(model.MM_II.state_dict(), os.path.join(result_path, 'HM_weights_{}.pt'.format(args.exp_name)))
+            if sum(eval_losses[-1]) < sum(best_eval_losses):
+                torch.save(model.MM_I.state_dict(), os.path.join(result_path, 'DR_weights_epoch{}.pt'.format(epoch)))
                 best_epoch = epoch
-                best_test_loss = test_losses[-1]
+                best_eval_losses = eval_losses[-1]
                 best_train_loss = train_losses[-1]
 
         model.train()
 
-    print("best_epoch: {}, best_train_loss: {}, best_test_loss: {}".format(best_epoch, best_train_loss, best_test_loss))
+    print("best_epoch: {}, best_train_loss: {}, best_test_loss: {}".format(best_epoch, best_train_loss, best_eval_losses))
 
     return model, train_losses, eval_losses
 
