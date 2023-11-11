@@ -38,6 +38,8 @@ def train_epoch_DR(model, criterion, optimizer, train_dataset, test_dataset, epo
             param.requires_grad = True
         for param in model.MM_II.parameters():
             param.requires_grad = False
+        model.MM_I.train()
+        model.MM_II.eval()
 
         # train
         train_loss = []
@@ -54,7 +56,7 @@ def train_epoch_DR(model, criterion, optimizer, train_dataset, test_dataset, epo
 
             loss_DR = criterion(embedding_to, embedding_from)
             # loss_HM = F.cross_entropy(input=answers, target=feedback.to(torch.device(device)))
-            best_labels = torch.ones((1, answers.shape[0])).int() * 5
+            best_labels = torch.ones((answers.shape[0])).int() * 4
             loss_HM = ord_loss(logits=answers, labels=best_labels.to(torch.device(device)))
 
             # # metric loss
@@ -103,7 +105,7 @@ def train_epoch_DR(model, criterion, optimizer, train_dataset, test_dataset, epo
             
                 loss_DR = criterion(embedding_to, embedding_from)
                 # loss_HM = F.cross_entropy(input=answers, target=feedback.to(torch.device(device)))
-                best_labels = torch.ones((1, answers.shape[0])).int() * 5
+                best_labels = torch.ones((answers.shape[0])).int() * 4
                 loss_HM = ord_loss(logits=answers, labels=best_labels.to(torch.device(device)))
 
                 # # metric loss
