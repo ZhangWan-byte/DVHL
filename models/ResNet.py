@@ -71,7 +71,7 @@ class BottleNeck(nn.Module):
 
 class ResNet(nn.Module):
 
-    def __init__(self, block, num_block, num_classes=16):
+    def __init__(self, block, num_block, out_channels=[10, 16, 32, 64], num_classes=16):
         super().__init__()
 
         self.in_channels = 10 # original: 64
@@ -82,12 +82,12 @@ class ResNet(nn.Module):
             nn.ReLU(inplace=True))
         #we use a different inputsize than the original paper
         #so conv2_x's stride is 1
-        self.conv2_x = self._make_layer(block, 10, num_block[0], 1)
-        self.conv3_x = self._make_layer(block, 16, num_block[1], 2)
-        self.conv4_x = self._make_layer(block, 32, num_block[2], 2)
-        self.conv5_x = self._make_layer(block, 64, num_block[3], 2)
+        self.conv2_x = self._make_layer(block, out_channels[0], num_block[0], 1)
+        self.conv3_x = self._make_layer(block, out_channels[1], num_block[1], 2)
+        self.conv4_x = self._make_layer(block, out_channels[2], num_block[2], 2)
+        self.conv5_x = self._make_layer(block, out_channels[3], num_block[3], 2)
         self.avg_pool = nn.AdaptiveAvgPool2d((1, 1))
-        self.fc = nn.Linear(64 * block.expansion, num_classes)
+        self.fc = nn.Linear(out_channels[3] * block.expansion, num_classes)
 
     def _make_layer(self, block, out_channels, num_blocks, stride):
         """make resnet layers(by layer i didnt mean this 'layer' was the
