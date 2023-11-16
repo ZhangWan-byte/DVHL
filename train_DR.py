@@ -112,14 +112,16 @@ if __name__=='__main__':
 
 
     # optimisation
-    optimizer_DR = torch.optim.Adam(model.MM_I.parameters(), lr=1e-4)
-    # scheduler_I = ...
+    optimizer_DR = PCGrad(torch.optim.Adam(model.MM_I.parameters(), lr=1e-4))
+    # scheduler_DR =torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer_DR, T_0=20, eta_min=1e-8)
+    scheduler_DR = None
 
     # 1.2 DR model
     model, train_losses, eval_losses = train_epoch_DR(
         model=model, 
         criterion=criterion_DR, 
         optimizer=optimizer_DR, 
+        scheduler=scheduler_DR, 
         train_dataset=train_dataset, 
         test_dataset=test_dataset, 
         epochs=args.epochs_DR, 
