@@ -33,7 +33,17 @@ class MMModel(nn.Module):
 
         # configure MM_I and MM_II
         self.MM_I = Encoder(output_dim=2)
-        self.MM_II = HumanModel(cnn_layers=cnn_layers, metric_num=9, hidden_dim=10, batch_size=batch_size, device=device)
+
+        # self.MM_II = HumanModel(cnn_layers=cnn_layers, metric_num=9, hidden_dim=10, batch_size=batch_size, device=device)
+        self.MM_II = HumanModel(
+            answers_classes=5, 
+            cnn_layers=[1,1,1,1], 
+            metric_num=9, 
+            hidden_dim=10, 
+            out_channels=[10, 16, 24, 32], 
+            batch_size=1000, 
+            device=torch.device('cuda')
+        )
 
         if MM_I_wPATH != None or MM_II_wPATH != None:
             self.init_weights(MM_I_wPATH, MM_II_wPATH)
@@ -74,7 +84,9 @@ class MMModel(nn.Module):
         I_hat = I_hat.permute(2,1,0).unsqueeze(0)
         # print("I_hat: ", I_hat.shape)
 
-        answers, pref_weights, pred_metrics = self.MM_II(I_hat=I_hat, z=z, labels=labels, x=x)
+        # answers, pref_weights, pred_metrics = self.MM_II(I_hat=I_hat, z=z, labels=labels, x=x)
+        answers = self.MM_II(I_hat=I_hat, z=z, labels=labels, x=x)
         # print("answers: ", answers.shape)
         
-        return z, answers, pref_weights, pred_metrics
+        # return z, answers, pref_weights, pred_metrics
+        return z, answers

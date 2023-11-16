@@ -51,13 +51,17 @@ def train_epoch_DR(model, criterion, optimizer, train_dataset, test_dataset, epo
 
             optimizer.zero_grad()
         
-            embedding_to, answers, pref_weights, pred_metrics = model(batch_to, y_to)
-            embedding_from, answers, pref_weights, pred_metrics = model(batch_from, y_from)
+            # embedding_to, answers, pref_weights, pred_metrics = model(batch_to, y_to)
+            # embedding_from, answers, pref_weights, pred_metrics = model(batch_from, y_from)
+            embedding_to, answers = model(batch_to, y_to)
+            embedding_from, answers = model(batch_from, y_from)
 
             loss_DR = criterion(embedding_to, embedding_from)
-            # loss_HM = F.cross_entropy(input=answers, target=feedback.to(torch.device(device)))
-            best_labels = torch.ones((answers.shape[0])).int() * 4
-            loss_HM = ord_loss(logits=answers, labels=best_labels.to(torch.device(device)))
+
+            # best_labels = torch.ones((answers.shape[0])).int() * 4
+            # loss_HM = ord_loss(logits=answers, labels=best_labels.to(torch.device(device)))
+            best_labels = torch.ones((answers.shape[0])).long() * 4
+            loss_HM = F.cross_entropy(input=answers, target=best_labels.to(torch.device(device)))
 
             # # metric loss
             # weights_metrics = get_weights(pref_weights)
@@ -100,13 +104,17 @@ def train_epoch_DR(model, criterion, optimizer, train_dataset, test_dataset, epo
 
                 optimizer.zero_grad()
             
-                embedding_to, answers, pref_weights, pred_metrics = model(batch_to, y_to)
-                embedding_from, answers, pref_weights, pred_metrics = model(batch_from, y_from)
+                # embedding_to, answers, pref_weights, pred_metrics = model(batch_to, y_to)
+                # embedding_from, answers, pref_weights, pred_metrics = model(batch_from, y_from)
+                embedding_to, answers  = model(batch_to, y_to)
+                embedding_from, answers  = model(batch_from, y_from)
             
                 loss_DR = criterion(embedding_to, embedding_from)
-                # loss_HM = F.cross_entropy(input=answers, target=feedback.to(torch.device(device)))
-                best_labels = torch.ones((answers.shape[0])).int() * 4
-                loss_HM = ord_loss(logits=answers, labels=best_labels.to(torch.device(device)))
+
+                # best_labels = torch.ones((answers.shape[0])).int() * 4
+                # loss_HM = ord_loss(logits=answers, labels=best_labels.to(torch.device(device)))
+                best_labels = torch.ones((answers.shape[0])).long() * 4
+                loss_HM = F.cross_entropy(input=answers, target=best_labels.to(torch.device(device)))
 
                 # # metric loss
                 # weights_metrics = get_weights(pref_weights)
