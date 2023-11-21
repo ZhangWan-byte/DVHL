@@ -378,7 +378,7 @@ def calc_p(x, beta, perp=None):
     
     values, indices = torch.topk(dists, k, dim=1, largest=False)
 
-    p_ij = my_p_i(values[:, 1:], beta)
+    p_ij = my_p_i(values, beta)
 
     p_ij = p_ij / p_ij.sum()
     
