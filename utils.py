@@ -361,15 +361,14 @@ def my_p_i(d, beta):
 def calc_p(x, beta, perp=None):
     """calculate p_ij
 
-    :param x: high dimensional (N, D)
-    :param beta: variance in Gaussian to control neighbour range
+    :param x: high dimensional - (N, D)
+    :param beta: variance in Gaussian to control neighbour range - (-1, 1)
     :param perp: perplexity, can be derived from beta
-    :return: p_ij matrix in shape (N, N)
+    :return: p_ij matrix - (N, N)
     """
 
     num_pts = x.shape[0]
     x = x.view(num_pts, -1)
-    beta = beta.view(-1, 1)
     # k = min(num_pts - 1, int(3 * perp))
     # k = np.rint(num_pts/2).astype(int)
     k = num_pts
