@@ -28,8 +28,13 @@ def normalise(z):
 
 
 class MMModel(nn.Module):
-    def __init__(self, MM_I_wPATH, MM_II_wPATH, cnn_layers=[1,1,1,1], VI_size=100, freeze=(False, False), batch_size=1000, device=torch.device('cuda')):
+    def __init__(self, MM_I_wPATH, MM_II_wPATH, cnn_layers=[1,1,1,1], VI_size=100, freeze=(False, False), batch_size=1000, device=torch.device('cuda'), DR='UMAP'):
         super(MMModel, self).__init__()
+
+        # t-SNE param
+        if DR == 't-SNE':
+            self.alpha = nn.Parameter(torch.tensor([1.0])).to(self.device)
+            self.beta = nn.Parameter(torch.tensor([1.0])).to(self.device)
 
         # configure MM_I and MM_II
         self.MM_I = Encoder(output_dim=2)

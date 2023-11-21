@@ -80,7 +80,8 @@ if __name__=='__main__':
         VI_size=100, 
         freeze=(True, False), 
         batch_size=args.batch_size_HM, 
-        device=torch.device(args.device)
+        device=torch.device(args.device), 
+        DR='t-SNE'
     )
 
     # get dataloader

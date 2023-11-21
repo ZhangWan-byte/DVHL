@@ -55,7 +55,7 @@ if __name__=='__main__':
     parser.add_argument('--batch_size_DR', type=int, default=1000, help='batch size - phase DR')
     parser.add_argument('--epochs_DR', type=int, default=20, help='training epochs - phase DR')
 
-    parser.add_argument('--alpha', type=float, default=0.3, help='alpha * DR_loss + (1-alpha) * HM_loss')
+    parser.add_argument('--gamma', type=float, default=0.3, help='gamma * DR_loss + (1-gamma) * HM_loss')
 
     # data
     parser.add_argument('--feedback_path', type=str, default="./results/231016000038_I_0/feedback.pt", \
@@ -108,7 +108,8 @@ if __name__=='__main__':
         VI_size=100, 
         freeze=(False, True), 
         batch_size=args.batch_size_DR, 
-        device=torch.device(args.device)
+        device=torch.device(args.device), 
+        DR=args.DR
     )
 
 
@@ -128,7 +129,7 @@ if __name__=='__main__':
         test_dataset=test_dataset, 
         epochs=args.epochs_DR, 
         result_path=result_path, 
-        alpha=args.alpha
+        gamma=args.gamma
     )
 
     # torch.save(model.MM_I.state_dict(), os.path.join(result_path, 'DR_weights_{}.pt'.format(args.exp_name)))

@@ -11,7 +11,7 @@ from datasets import *
 
 
 # epoch training for dimensinality reduction
-def train_epoch_DR(args, model, criterion, optimizer, scheduler, train_dataset, test_dataset, epochs=20, device='cuda', result_path=None, alpha=0.3):
+def train_epoch_DR(args, model, criterion, optimizer, scheduler, train_dataset, test_dataset, epochs=20, device='cuda', result_path=None, gamma=0.3):
     """train MM_I and freeze MM_II
 
     :param model: MMModel
@@ -108,7 +108,7 @@ def train_epoch_DR(args, model, criterion, optimizer, scheduler, train_dataset, 
                 best_labels = torch.ones((answers.shape[0])).long() * 4
                 loss_HM = F.cross_entropy(input=answers, target=best_labels.to(torch.device(device)))
 
-                loss = alpha * loss_DR + (1-alpha) * loss_HM
+                loss = gamma * loss_DR + (1-gamma) * loss_HM
 
                 # # PCGrad
                 # loss = [loss_DR, loss_HM]
@@ -196,7 +196,7 @@ def train_epoch_DR(args, model, criterion, optimizer, scheduler, train_dataset, 
                     best_labels = torch.ones((answers.shape[0])).long() * 4
                     loss_HM = F.cross_entropy(input=answers, target=best_labels.to(torch.device(device)))
 
-                    loss = alpha * loss_DR + (1-alpha) * loss_HM
+                    loss = gamma * loss_DR + (1-gamma) * loss_HM
                 
                     eval_loss.append((loss_DR.item(), loss_HM.item()))
             
