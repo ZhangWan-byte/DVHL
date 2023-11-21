@@ -316,3 +316,69 @@ class PCGrad():
                 grad.append(p.grad.clone())
                 has_grad.append(torch.ones_like(p).to(p.device))
         return grad, shape, has_grad
+
+
+def kullback_leibler_loss(p, q, eps=1.0e-7):
+    eps = torch.tensor(eps, dtype=p.dtype)
+    kl_matr = torch.mul(p, torch.log(p + eps) - torch.log(q + eps))
+    kl_matr.fill_diagonal_(0.)    
+    return torch.sum(kl_matr)
+
+def dist_mat_squared(x):
+    batch_size = x.shape[0] 
+    expanded = x.unsqueeze(1)
+    tiled = torch.repeat_interleave(expanded, batch_size, dim=1)
+    diffs = tiled - tiled.transpose(0, 1)
+    sum_act = torch.sum(torch.pow(diffs,2), axis=2)    
+    return sum_act
+
+def norm_sym(x):
+    # x.fill_diagonal_(0.)
+    mask = torch.ones(x.shape).fill_diagonal_(0.).to(x.device)
+    x = mask * x
+    # original code is in-place operation -- not feasible for gradient backwards
+    
+    norm_facs = x.sum(axis=0, keepdim=True)
+    x = x / norm_facs
+    return 0.5*(x + x.t())
+
+def calc_q(x, alpha):
+    dists = dist_mat_squared(x)
+    q = torch.pow((1 + dists/alpha), -(alpha+1)/2)
+    
+    q = norm_sym(q)
+
+    q = q / q.sum()
+
+    return q
+
+def my_p_i(d, beta):
+    x = - d * beta
+    y = torch.exp(x)
+    ysum = y.sum(dim=1, keepdim=True)
+    return y / ysum
+
+def calc_p(x, beta, perp=None):
+    """calculate p_ij
+
+    :param x: high dimensional (N, D)
+    :param beta: variance in Gaussian to control neighbour range
+    :param perp: perplexity, can be derived from beta
+    :return: p_ij matrix in shape (N, N)
+    """
+
+    num_pts = x.shape[0]
+    x = x.view(num_pts, -1)
+    beta = beta.view(-1, 1)
+    # k = min(num_pts - 1, int(3 * perp))
+    k = np.rint(num_pts/2).astype(int)
+
+    dists = torch.sqrt(dist_mat_squared(x))
+    
+    values, indices = torch.topk(dists, k, dim=1, largest=False)
+
+    p_ij = my_p_i(values[:, 1:], beta)
+
+    p_ij = p_ij / p_ij.sum()
+    
+    return p_ij

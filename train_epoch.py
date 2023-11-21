@@ -11,7 +11,7 @@ from datasets import *
 
 
 # epoch training for dimensinality reduction
-def train_epoch_DR(model, criterion, optimizer, scheduler, train_dataset, test_dataset, epochs=20, device='cuda', result_path=None, alpha=0.3):
+def train_epoch_DR(args, model, criterion, optimizer, scheduler, train_dataset, test_dataset, epochs=20, device='cuda', result_path=None, alpha=0.3):
     """train MM_I and freeze MM_II
 
     :param model: MMModel
@@ -20,9 +20,6 @@ def train_epoch_DR(model, criterion, optimizer, scheduler, train_dataset, test_d
     :return: 
     """
 
-    total_train = train_dataset.batches_per_epoch
-    total_test = test_dataset.batches_per_epoch
-
     # recording variables
     best_train_loss = (10.0, 10.0)
     best_eval_losses = (10.0, 10.0)
@@ -30,6 +27,10 @@ def train_epoch_DR(model, criterion, optimizer, scheduler, train_dataset, test_d
 
     train_losses = []
     eval_losses = []
+
+    if args.DR != 'UMAP':
+        train_loader = DataLoader(train_dataset, batch_size=args.batch_size_DR, shuffle=True)
+        test_loader = DataLoader(train_dataset, batch_size=args.batch_size_DR, shuffle=False)
 
     for epoch in range(epochs):
 
@@ -44,44 +45,84 @@ def train_epoch_DR(model, criterion, optimizer, scheduler, train_dataset, test_d
         # train
         train_loss = []
         
-        for batch_to, batch_from, batch_index_to, batch_index_from, labels, feedback in tqdm(train_dataset.get_batches(), total=total_train):
+        if args.DR == "UMAP":
         
-            y_to = labels[batch_index_to].to(torch.device(device))
-            y_from = labels[batch_index_from].to(torch.device(device))
+            total_train = train_dataset.batches_per_epoch
+            total_test = test_dataset.batches_per_epoch
 
-            optimizer.zero_grad()
+            for batch_to, batch_from, batch_index_to, batch_index_from, labels, feedback in tqdm(train_dataset.get_batches(), total=total_train):
+            
+                y_to = labels[batch_index_to].to(torch.device(device))
+                y_from = labels[batch_index_from].to(torch.device(device))
+
+                optimizer.zero_grad()
+            
+                # embedding_to, answers, pref_weights, pred_metrics = model(batch_to, y_to)
+                # embedding_from, answers, pref_weights, pred_metrics = model(batch_from, y_from)
+                embedding_to, answers = model(batch_to, y_to)
+                embedding_from, answers = model(batch_from, y_from)
+
+                loss_DR = criterion(embedding_to, embedding_from)
+
+                # best_labels = torch.ones((answers.shape[0])).int() * 4
+                # loss_HM = ord_loss(logits=answers, labels=best_labels.to(torch.device(device)))
+                best_labels = torch.ones((answers.shape[0])).long() * 4
+                loss_HM = F.cross_entropy(input=answers, target=best_labels.to(torch.device(device)))
+
+                # # metric loss
+                # weights_metrics = get_weights(pref_weights)
+                # loss_metrics = torch.mean(pred_metrics * weights_metrics)
+
+                # # loss = 0.3*loss_DR + 0.7*loss_HM # + loss_metrics
+                # loss = 0.2*loss_DR + 0.4*loss_HM + 0.4*loss_metrics
+
+                # loss = alpha * loss_DR + (1-alpha) * loss_HM
+
+                # PCGrad
+                loss = [loss_DR, loss_HM]
+                optimizer.pc_backward(loss)
+            
+                # train_loss.append((loss.item(), loss_DR.item(), loss_HM.item(), loss_metrics.item()))
+                train_loss.append((loss_DR.item(), loss_HM.item()))
+            
+                # loss.backward()
+            
+                optimizer.step()
         
-            # embedding_to, answers, pref_weights, pred_metrics = model(batch_to, y_to)
-            # embedding_from, answers, pref_weights, pred_metrics = model(batch_from, y_from)
-            embedding_to, answers = model(batch_to, y_to)
-            embedding_from, answers = model(batch_from, y_from)
+        elif args.DR == "t-SNE":
+            
+            for data, labels, feedback in tqdm(train_loader):
+            
+                data = data.to(torch.device(device))
+                labels = labels.to(torch.device(device))
 
-            loss_DR = criterion(embedding_to, embedding_from)
+                optimizer.zero_grad()
+            
+                z, answers = model(data, labels)
 
-            # best_labels = torch.ones((answers.shape[0])).int() * 4
-            # loss_HM = ord_loss(logits=answers, labels=best_labels.to(torch.device(device)))
-            best_labels = torch.ones((answers.shape[0])).long() * 4
-            loss_HM = F.cross_entropy(input=answers, target=best_labels.to(torch.device(device)))
+                p = calc_p(data, beta=model.beta.repeat(data.shape[0]))
+                q = calc_q(z, alpha=model.alpha.repeat(data.shape[0]))
 
-            # # metric loss
-            # weights_metrics = get_weights(pref_weights)
-            # loss_metrics = torch.mean(pred_metrics * weights_metrics)
+                loss_DR = criterion(p, q)
 
-            # # loss = 0.3*loss_DR + 0.7*loss_HM # + loss_metrics
-            # loss = 0.2*loss_DR + 0.4*loss_HM + 0.4*loss_metrics
+                best_labels = torch.ones((answers.shape[0])).long() * 4
+                loss_HM = F.cross_entropy(input=answers, target=best_labels.to(torch.device(device)))
 
-            # loss = alpha * loss_DR + (1-alpha) * loss_HM
+                loss = alpha * loss_DR + (1-alpha) * loss_HM
 
-            # PCGrad
-            loss = [loss_DR, loss_HM]
-            optimizer.pc_backward(loss)
-        
-            # train_loss.append((loss.item(), loss_DR.item(), loss_HM.item(), loss_metrics.item()))
-            train_loss.append((loss_DR.item(), loss_HM.item()))
-        
-            # loss.backward()
-        
-            optimizer.step()
+                # # PCGrad
+                # loss = [loss_DR, loss_HM]
+                # optimizer.pc_backward(loss)
+            
+                train_loss.append((loss_DR.item(), loss_HM.item()))
+            
+                loss.backward()
+            
+                optimizer.step()
+
+        else:
+            print("wrong args.DR!")
+            exit()
 
         if scheduler!=None:
             scheduler.step()
@@ -105,34 +146,63 @@ def train_epoch_DR(model, criterion, optimizer, scheduler, train_dataset, test_d
             model.eval()
 
             eval_loss = []
-            
-            for batch_to, batch_from, batch_index_to, batch_index_from, labels, feedback in tqdm(test_dataset.get_batches(), total=total_test):
-            
-                y_to = labels[batch_index_to].to(torch.device(device))
-                y_from = labels[batch_index_from].to(torch.device(device))
 
-                optimizer.zero_grad()
+            if args.DR == 'UMAP':
             
-                # embedding_to, answers, pref_weights, pred_metrics = model(batch_to, y_to)
-                # embedding_from, answers, pref_weights, pred_metrics = model(batch_from, y_from)
-                embedding_to, answers  = model(batch_to, y_to)
-                embedding_from, answers  = model(batch_from, y_from)
+                for batch_to, batch_from, batch_index_to, batch_index_from, labels, feedback in tqdm(test_dataset.get_batches(), total=total_test):
+                
+                    y_to = labels[batch_index_to].to(torch.device(device))
+                    y_from = labels[batch_index_from].to(torch.device(device))
+
+                    optimizer.zero_grad()
+                
+                    # embedding_to, answers, pref_weights, pred_metrics = model(batch_to, y_to)
+                    # embedding_from, answers, pref_weights, pred_metrics = model(batch_from, y_from)
+                    embedding_to, answers  = model(batch_to, y_to)
+                    embedding_from, answers  = model(batch_from, y_from)
+                
+                    loss_DR = criterion(embedding_to, embedding_from)
+
+                    # best_labels = torch.ones((answers.shape[0])).int() * 4
+                    # loss_HM = ord_loss(logits=answers, labels=best_labels.to(torch.device(device)))
+                    best_labels = torch.ones((answers.shape[0])).long() * 4
+                    loss_HM = F.cross_entropy(input=answers, target=best_labels.to(torch.device(device)))
+
+                    # # metric loss
+                    # weights_metrics = get_weights(pref_weights)
+                    # loss_metrics = torch.mean(pred_metrics * weights_metrics)
+
+                    # loss = 0.2*loss_DR + 0.4*loss_HM + 0.4*loss_metrics
+                
+                    # eval_loss.append((loss.item(), loss_DR.item(), loss_HM.item(), loss_metrics.item()))
+                    eval_loss.append((loss_DR.item(), loss_HM.item()))
+
+            elif args.DR == 't-SNE':
+
+                for data, labels, feedback in tqdm(train_loader):
             
-                loss_DR = criterion(embedding_to, embedding_from)
+                    data = data.to(torch.device(device))
+                    labels = labels.to(torch.device(device))
 
-                # best_labels = torch.ones((answers.shape[0])).int() * 4
-                # loss_HM = ord_loss(logits=answers, labels=best_labels.to(torch.device(device)))
-                best_labels = torch.ones((answers.shape[0])).long() * 4
-                loss_HM = F.cross_entropy(input=answers, target=best_labels.to(torch.device(device)))
+                    optimizer.zero_grad()
+                
+                    z, answers = model(data, labels)
 
-                # # metric loss
-                # weights_metrics = get_weights(pref_weights)
-                # loss_metrics = torch.mean(pred_metrics * weights_metrics)
+                    p = calc_p(data, beta=model.beta.repeat(data.shape[0]))
+                    q = calc_q(z, alpha=model.alpha.repeat(data.shape[0]))
 
-                # loss = 0.2*loss_DR + 0.4*loss_HM + 0.4*loss_metrics
+                    loss_DR = criterion(p, q)
+
+                    best_labels = torch.ones((answers.shape[0])).long() * 4
+                    loss_HM = F.cross_entropy(input=answers, target=best_labels.to(torch.device(device)))
+
+                    loss = alpha * loss_DR + (1-alpha) * loss_HM
+                
+                    eval_loss.append((loss_DR.item(), loss_HM.item()))
             
-                # eval_loss.append((loss.item(), loss_DR.item(), loss_HM.item(), loss_metrics.item()))
-                eval_loss.append((loss_DR.item(), loss_HM.item()))
+            else:
+                print("wrong args.DR!")
+                exit()
 
             DR_loss = np.mean([i[0] for i in eval_loss])
             HM_loss = np.mean([i[1] for i in eval_loss])

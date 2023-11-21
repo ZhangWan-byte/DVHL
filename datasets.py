@@ -56,6 +56,19 @@ class UMAPDataset:
             yield (batch_to, batch_from, batch_index_to, batch_index_from, self.labels, self.feedback)
 
 
+class TSNEDataset(Dataset):
+    def __init__(self, data, labels, feedback):
+        self.data = data
+        self.labels = labels
+        self.feedback = feedback
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        return self.data[idx], self.labels[idx], self.feedback
+
+
 class HumanDataset(Dataset):
     def __init__(self, X, y, feedback):
         self.X = X
@@ -92,7 +105,8 @@ def get_dataset(args, data='MNIST', DR='UMAP'):
         y_test = torch.tensor([i[1] for i in testset])
         print("X_test.shape: {}".format(X_test.shape))          # X_test.shape: torch.Size([10000, 1, 28, 28])
     else:
-        pass
+        print("dataset not implemented!")
+        exit()
 
     # get dataloader
     if args.train=='DR':
@@ -140,9 +154,13 @@ def get_dataset(args, data='MNIST', DR='UMAP'):
             return train_dataset, test_dataset
         # DR model is t-SNE
         elif DR=='t-SNE':
-            pass
+            train_dataset = TSNEDataset(data=X_train, labels=y_train, feedback=feedback)
+            test_dataset = TSNEDataset(data=X_test, labels=y_test, feedback=feedback)
+
+            return train_dataset, test_dataset
         else:
-            pass
+            print("wrong args.DR!")
+            exit()
 
     elif args.train=='HM':
         feedback = torch.load(args.feedback_path)

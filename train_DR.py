@@ -40,6 +40,7 @@ if __name__=='__main__':
         help='weights to initialise DR model')
     parser.add_argument('--MM_II_wPATH', type=str, default="./data/pretrain_results/HM_weights.pt", \
         help='weights to initialise human model')
+    parser.add_argument('--dataset', type=str, default="MNIST", help='MNIST, COIL-20, etc')
     parser.add_argument('--DR', type=str, default="UMAP", help='UMAP or t-SNE')
     
     # UMAP hyper-params
@@ -80,7 +81,7 @@ if __name__=='__main__':
         json.dump(args.__dict__, f, indent=4)
 
 
-    train_dataset, test_dataset = get_dataset(args=args, data='MNIST', DR='UMAP')
+    train_dataset, test_dataset = get_dataset(args=args, data=args.dataset, DR=args.DR)
 
     # loss function
     if args.DR=="UMAP":
@@ -93,7 +94,7 @@ if __name__=='__main__':
             repulsion_strength=args.repulsion_strength
         )
     elif args.DR=="t-SNE":
-        pass
+        criterion_DR = kullback_leibler_loss
     else:
         print("wrong args.DR")
         exit()
@@ -118,6 +119,7 @@ if __name__=='__main__':
 
     # 1.2 DR model
     model, train_losses, eval_losses = train_epoch_DR(
+        args=args, 
         model=model, 
         criterion=criterion_DR, 
         optimizer=optimizer_DR, 
