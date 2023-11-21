@@ -100,9 +100,9 @@ def train_epoch_DR(args, model, criterion, optimizer, scheduler, train_dataset, 
             
                 z, answers = model(data, labels)
 
-                p = calc_p(data, beta=model.beta.repeat(data.shape[0]))
-                q = calc_q(z, alpha=model.alpha.repeat(data.shape[0]))
-                print(p.shape, q.shape)
+                p = calc_p(data, beta=model.beta.repeat(data.shape[0]))         # (batch, batch)
+                q = calc_q(z, alpha=model.alpha.repeat(data.shape[0]))          # (batch, batch)
+
                 loss_DR = criterion(p, q)
 
                 best_labels = torch.ones((answers.shape[0])).long() * 4
