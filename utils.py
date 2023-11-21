@@ -371,7 +371,8 @@ def calc_p(x, beta, perp=None):
     x = x.view(num_pts, -1)
     beta = beta.view(-1, 1)
     # k = min(num_pts - 1, int(3 * perp))
-    k = np.rint(num_pts/2).astype(int)
+    # k = np.rint(num_pts/2).astype(int)
+    k = num_pts
 
     dists = torch.sqrt(dist_mat_squared(x))
     

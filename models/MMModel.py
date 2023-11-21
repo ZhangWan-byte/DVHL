@@ -33,8 +33,8 @@ class MMModel(nn.Module):
 
         # t-SNE param
         if DR == 't-SNE':
-            self.alpha = nn.Parameter(torch.tensor([1.0])).to(self.device)
-            self.beta = nn.Parameter(torch.tensor([1.0])).to(self.device)
+            self.alpha = nn.Parameter(torch.tensor([1.0])).to(device)
+            self.beta = nn.Parameter(torch.tensor([1.0])).to(device)
 
         # configure MM_I and MM_II
         self.MM_I = Encoder(output_dim=2)
