@@ -38,7 +38,7 @@ class myPCA(nn.Module):
 
 class Encoder(nn.Module):
 
-    def __init__ (self, output_dim=2):
+    def __init__ (self, output_dim=2, DR='UMAP'):
         super().__init__()
         self.conv1 = nn.Conv2d(in_channels=1, out_channels=64, kernel_size=3, stride=2)
         self.conv2 = nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3, stride=2)
@@ -46,6 +46,19 @@ class Encoder(nn.Module):
         self.linear1 = nn.Linear(128*6*6, 512)
         self.linear2 = nn.Linear(512, 512)
         self.linear3 = nn.Linear(512, output_dim)
+
+        # t-SNE param
+        if DR == 't-SNE':
+            # self.alpha = nn.Parameter(torch.tensor([1.0])).to(device)
+            # self.beta = nn.Parameter(torch.tensor([1.0])).to(device)
+            self.alpha = torch.tensor(1.0, requires_grad=True, device="cuda")
+            self.beta = torch.tensor(1.0, requires_grad=True, device="cuda")
+
+            # self.alpha.requires_grad = True
+            # self.beta.requires_grad = True
+        else:
+            self.alpha = None
+            self.beta = None
 
     def forward(self, x):
         x = F.relu(self.conv1(x))

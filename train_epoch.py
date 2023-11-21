@@ -100,8 +100,8 @@ def train_epoch_DR(args, model, criterion, optimizer, scheduler, train_dataset, 
             
                 z, answers = model(data, labels)
 
-                p = calc_p(data, beta=model.beta.repeat(data.shape[0]).view(-1,1))         # (batch, batch)
-                q = calc_q(z, alpha=model.alpha.repeat(data.shape[0]).view(-1,1))          # (batch, batch)
+                p = calc_p(data, beta=model.MM_I.beta.repeat(data.shape[0]).view(-1,1))         # (batch, batch)
+                q = calc_q(z, alpha=model.MM_I.alpha.repeat(data.shape[0]).view(-1,1))          # (batch, batch)
 
                 loss_DR = criterion(p, q)
 
@@ -120,7 +120,7 @@ def train_epoch_DR(args, model, criterion, optimizer, scheduler, train_dataset, 
             
                 optimizer.step()
 
-                # print(model.alpha.grad, model.beta.grad)
+                # print(model.MM_I.alpha.grad, model.MM_I.beta.grad)
 
         else:
             print("wrong args.DR!")
@@ -190,8 +190,8 @@ def train_epoch_DR(args, model, criterion, optimizer, scheduler, train_dataset, 
                 
                     z, answers = model(data, labels)
 
-                    p = calc_p(data, beta=model.beta.repeat(data.shape[0]).view(-1,1))
-                    q = calc_q(z, alpha=model.alpha.repeat(data.shape[0]).view(-1,1))
+                    p = calc_p(data, beta=model.MM_I.beta.repeat(data.shape[0]).view(-1,1))
+                    q = calc_q(z, alpha=model.MM_I.alpha.repeat(data.shape[0]).view(-1,1))
 
                     loss_DR = criterion(p, q)
 
@@ -202,7 +202,7 @@ def train_epoch_DR(args, model, criterion, optimizer, scheduler, train_dataset, 
                 
                     eval_loss.append((loss_DR.item(), loss_HM.item()))
 
-                print("alpha: {}, beta: {}".format(model.alpha, model.beta))
+                print("alpha: {}, beta: {}".format(model.MM_I.alpha, model.MM_I.beta))
             
             else:
                 print("wrong args.DR!")
