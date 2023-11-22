@@ -109,10 +109,6 @@ def train_epoch_DR(args, model, criterion, optimizer, scheduler, train_dataset, 
                 loss_HM = F.cross_entropy(input=answers, target=best_labels.to(torch.device(device)))
 
                 loss = gamma * loss_DR + (1-gamma) * loss_HM
-
-                # # PCGrad
-                # loss = [loss_DR, loss_HM]
-                # optimizer.pc_backward(loss)
             
                 train_loss.append((loss_DR.item(), loss_HM.item()))
             
@@ -120,7 +116,7 @@ def train_epoch_DR(args, model, criterion, optimizer, scheduler, train_dataset, 
             
                 optimizer.step()
 
-                # print(model.MM_I.alpha.grad, model.MM_I.beta.grad)
+                # print("alpha grad: {}, beta grad: {}".format(model.MM_I.alpha.grad, model.MM_I.beta.grad))
 
         else:
             print("wrong args.DR!")
