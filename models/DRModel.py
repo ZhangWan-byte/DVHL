@@ -47,22 +47,7 @@ class Encoder(nn.Module):
         self.linear2 = nn.Linear(512, 512)
         self.linear3 = nn.Linear(512, output_dim)
 
-        # # t-SNE param
-        # if DR == 't-SNE':
-        #     # self.alpha = nn.Parameter(torch.tensor([1.0])).to(device)
-        #     # self.beta = nn.Parameter(torch.tensor([1.0])).to(device)
-        #     self.alpha = torch.tensor(1.0, requires_grad=True, device="cuda")
-        #     self.beta = torch.tensor(1.0, requires_grad=True, device="cuda")
-
-        #     # self.alpha.requires_grad = True
-        #     # self.beta.requires_grad = True
-        # else:
-        #     self.alpha = None
-        #     self.beta = None
-
-        # self.alpha = torch.tensor(1.0, requires_grad=True, device="cuda")
-        # self.beta = torch.tensor(1.0, requires_grad=True, device="cuda")
-        self.alpha = nn.Parameter(torch.ones(1))
+        # self.alpha = nn.Parameter(torch.ones(1))
         self.beta = nn.Parameter(torch.ones(1))
 
     def forward(self, x):

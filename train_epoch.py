@@ -101,7 +101,8 @@ def train_epoch_DR(args, model, criterion, optimizer, scheduler, train_dataset, 
                 z, answers = model(data, labels)
 
                 p = calc_p(data, beta=model.MM_I.beta.repeat(data.shape[0]).view(-1,1))         # (batch, batch)
-                q = calc_q(z, alpha=model.MM_I.alpha.repeat(data.shape[0]).view(-1,1))          # (batch, batch)
+                # q = calc_q(z, alpha=model.MM_I.alpha.repeat(data.shape[0]).view(-1,1))          # (batch, batch)
+                q = calc_q(z, alpha=1)
 
                 loss_DR = criterion(p, q)
 
@@ -187,7 +188,8 @@ def train_epoch_DR(args, model, criterion, optimizer, scheduler, train_dataset, 
                     z, answers = model(data, labels)
 
                     p = calc_p(data, beta=model.MM_I.beta.repeat(data.shape[0]).view(-1,1))
-                    q = calc_q(z, alpha=model.MM_I.alpha.repeat(data.shape[0]).view(-1,1))
+                    # q = calc_q(z, alpha=model.MM_I.alpha.repeat(data.shape[0]).view(-1,1))
+                    q = calc_q(z, alpha=1)
 
                     loss_DR = criterion(p, q)
 
