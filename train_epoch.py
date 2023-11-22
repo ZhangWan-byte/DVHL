@@ -198,7 +198,7 @@ def train_epoch_DR(args, model, criterion, optimizer, scheduler, train_dataset, 
                 
                     eval_loss.append((loss_DR.item(), loss_HM.item()))
 
-                print("alpha: {}, beta: {}".format(model.MM_I.alpha, model.MM_I.beta))
+                print("alpha: {}, beta: {}".format(model.MM_I.alpha.item(), model.MM_I.beta.item()))
             
             else:
                 print("wrong args.DR!")
