@@ -200,7 +200,10 @@ def train_epoch_DR(args, model, criterion, optimizer, scheduler, train_dataset, 
                 
                     eval_loss.append((loss_DR.item(), loss_HM.item()))
 
-                print("alpha: {}, beta: {}".format(model.MM_I.alpha.item(), model.MM_I.beta.item()))
+                try:
+                    print("alpha: {}, beta: {}".format(model.MM_I.alpha.item(), model.MM_I.beta.item()))
+                except:
+                    print("alpha: 1, beta: {}".format(model.MM_I.beta.item()))
             
             else:
                 print("wrong args.DR!")
@@ -216,7 +219,7 @@ def train_epoch_DR(args, model, criterion, optimizer, scheduler, train_dataset, 
 
             torch.save(model.MM_I.state_dict(), os.path.join(result_path, 'DR_weights_epoch{}.pt'.format(epoch)))
 
-            # if (alpha * eval_losses[-1][0] + (1-alpha) * eval_losses[-1][1]) < sum(best_eval_losses):
+            # if (gamma * eval_losses[-1][0] + (1-gamma) * eval_losses[-1][1]) < sum(best_eval_losses):
             if eval_losses[-1][1] < best_eval_losses[1]:
                 torch.save(model.MM_I.state_dict(), os.path.join(result_path, 'DR_weights_best.pt'))
                 best_epoch = epoch
