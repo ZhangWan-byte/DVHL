@@ -116,7 +116,7 @@ def train_epoch_DR(args, model, criterion, optimizer, scheduler, train_dataset, 
                 loss.backward()
             
                 # torch.nn.utils.clip_grad_value_(model.beta, clip_value, foreach=None)
-                if model.beta.grad.item() < 1e-6 or model.beta.grad.item() >= 1.0:
+                if np.abs(model.beta.grad.item()) < 1e-6 or np.abs(model.beta.grad.item()) > 1.0:
                     optimizer.param_groups[1]['lr'] = 0.0
                 else:
                     optimizer.param_groups[1]['lr'] = 1.0
