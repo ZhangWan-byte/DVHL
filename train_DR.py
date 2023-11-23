@@ -117,7 +117,7 @@ if __name__=='__main__':
     # optimizer_DR = PCGrad(torch.optim.Adam(model.MM_I.parameters(), lr=1e-4))
     optimizer_DR = torch.optim.Adam([
         {"params": model.MM_I.parameters(), "lr": 1e-4}, 
-        {"params1": model.beta, "lr": 1.0}
+        {"params": model.beta, "lr": 1.0}
     ])
     # scheduler_DR =torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer_DR, T_0=20, eta_min=1e-8)
     scheduler_DR = None
