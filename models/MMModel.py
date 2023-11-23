@@ -33,6 +33,8 @@ class MMModel(nn.Module):
 
         self.DR = DR
 
+        self.beta = nn.Parameter(torch.ones(1).to(device))
+
         # configure MM_I and MM_II
         self.MM_I = Encoder(output_dim=2, DR=DR)
 

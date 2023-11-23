@@ -47,8 +47,8 @@ class Encoder(nn.Module):
         self.linear2 = nn.Linear(512, 512)
         self.linear3 = nn.Linear(512, output_dim)
 
-        # self.alpha = nn.Parameter(torch.ones(1))
-        self.beta = nn.Parameter(torch.ones(1))
+        # # self.alpha = nn.Parameter(torch.ones(1))
+        # self.beta = nn.Parameter(torch.ones(1))
 
     def forward(self, x):
         x = F.relu(self.conv1(x))

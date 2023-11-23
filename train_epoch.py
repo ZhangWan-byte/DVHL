@@ -100,7 +100,7 @@ def train_epoch_DR(args, model, criterion, optimizer, scheduler, train_dataset, 
             
                 z, answers = model(data, labels)
 
-                p = calc_p(data, beta=model.MM_I.beta.repeat(data.shape[0]).view(-1,1))         # (batch, batch)
+                p = calc_p(data, beta=model.beta.repeat(data.shape[0]).view(-1,1))         # (batch, batch)
                 # q = calc_q(z, alpha=model.MM_I.alpha.repeat(data.shape[0]).view(-1,1))          # (batch, batch)
                 q = calc_q(z, alpha=1)
 
@@ -117,7 +117,7 @@ def train_epoch_DR(args, model, criterion, optimizer, scheduler, train_dataset, 
             
                 optimizer.step()
 
-                # print("alpha grad: {}, beta grad: {}".format(model.MM_I.alpha.grad, model.MM_I.beta.grad))
+                # print("alpha grad: {}, beta grad: {}".format(model.alpha.grad, model.beta.grad))
 
         else:
             print("wrong args.DR!")
@@ -187,7 +187,7 @@ def train_epoch_DR(args, model, criterion, optimizer, scheduler, train_dataset, 
                 
                     z, answers = model(data, labels)
 
-                    p = calc_p(data, beta=model.MM_I.beta.repeat(data.shape[0]).view(-1,1))
+                    p = calc_p(data, beta=model.beta.repeat(data.shape[0]).view(-1,1))
                     # q = calc_q(z, alpha=model.MM_I.alpha.repeat(data.shape[0]).view(-1,1))
                     q = calc_q(z, alpha=1)
 
@@ -201,9 +201,9 @@ def train_epoch_DR(args, model, criterion, optimizer, scheduler, train_dataset, 
                     eval_loss.append((loss_DR.item(), loss_HM.item()))
 
                 try:
-                    print("alpha: {}, beta: {}".format(model.MM_I.alpha.item(), model.MM_I.beta.item()))
+                    print("alpha: {}, beta: {}".format(model.MM_I.alpha.item(), model.beta.item()))
                 except:
-                    print("alpha: 1, beta: {}".format(model.MM_I.beta.item()))
+                    print("alpha: 1, beta: {}".format(model.beta.item()))
             
             else:
                 print("wrong args.DR!")
