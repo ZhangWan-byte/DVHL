@@ -104,10 +104,21 @@ def train_epoch_DR(args, model, criterion, optimizer, scheduler, train_dataset, 
                 # q = calc_q(z, alpha=model.MM_I.alpha.repeat(data.shape[0]).view(-1,1))          # (batch, batch)
                 q = calc_q(z, alpha=1)
 
+                if epoch < 10:
+                    # exaggeration test
+                    exaggeration = 10.
+                    
+                    p *= exaggeration
+
                 loss_DR = criterion(p, q)
 
+                if epoch < 10:
+                   # exaggeration test
+                   loss_DR = loss_DR / exaggeration - np.log(exaggeration)
+
                 best_labels = torch.ones((answers.shape[0])).long() * 4
-                loss_HM = F.cross_entropy(input=answers, target=best_labels.to(torch.device(device)))
+                # loss_HM = F.cross_entropy(input=answers, target=best_labels.to(torch.device(device)))
+                loss_HM = torch.zeros(1).cuda()
 
                 loss = gamma * loss_DR + (1-gamma) * loss_HM
             
@@ -172,7 +183,8 @@ def train_epoch_DR(args, model, criterion, optimizer, scheduler, train_dataset, 
                     # best_labels = torch.ones((answers.shape[0])).int() * 4
                     # loss_HM = ord_loss(logits=answers, labels=best_labels.to(torch.device(device)))
                     best_labels = torch.ones((answers.shape[0])).long() * 4
-                    loss_HM = F.cross_entropy(input=answers, target=best_labels.to(torch.device(device)))
+                    # loss_HM = F.cross_entropy(input=answers, target=best_labels.to(torch.device(device)))
+                    loss_HM = torch.zeros(1).cuda()
 
                     # # metric loss
                     # weights_metrics = get_weights(pref_weights)
