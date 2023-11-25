@@ -32,11 +32,11 @@ from train_epoch import train_epoch_DR
 if __name__=='__main__':
 
     
-
+    # , default="./data/pretrain_results/DR_weights.pt"
     # arguments
     parser = argparse.ArgumentParser()
     parser.add_argument('--train', type=str, default='DR', help="train DR or HM")
-    parser.add_argument('--MM_I_wPATH', type=str, default="./data/pretrain_results/DR_weights.pt", \
+    parser.add_argument('--MM_I_wPATH', type=str, \
         help='weights to initialise DR model')
     parser.add_argument('--MM_II_wPATH', type=str, default="./data/pretrain_results/HM_weights.pt", \
         help='weights to initialise human model')
