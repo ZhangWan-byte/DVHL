@@ -58,7 +58,9 @@ class AttnFusion(nn.Module):
         return fusion_attn
 
 
-
+"""
+    CNN + Preference Tower
+"""
 # class HumanModel(nn.Module):
 #     def __init__(self, cnn_layers=[1,1,1,1], metric_num=9, hidden_dim=10, batch_size=1000, device=torch.device('cuda')):
 #         super(HumanModel, self).__init__()
@@ -238,102 +240,119 @@ class AttnFusion(nn.Module):
 
 
 
-class HumanModel(nn.Module):
-    def __init__(self, answers_classes=5, cnn_layers=[1,1,1,1], metric_num=9, hidden_dim=10, out_channels=[10, 16, 32, 64], batch_size=1000, device=torch.device('cuda')):
-        super(HumanModel, self).__init__()
+
+"""
+    only CNN
+"""
+# class HumanModel(nn.Module):
+#     def __init__(self, answers_classes=5, cnn_layers=[1,1,1,1], metric_num=9, hidden_dim=10, out_channels=[10, 16, 32, 64], batch_size=1000, device=torch.device('cuda')):
+#         super(HumanModel, self).__init__()
         
-        self.hidden_dim = hidden_dim
-        self.device = device
+#         self.hidden_dim = hidden_dim
+#         self.device = device
 
-        self.answers_classes = answers_classes
+#         self.answers_classes = answers_classes
 
-        # cnn tower
-        self.cnn = ResNet(block=BasicBlock, num_block=cnn_layers, num_classes=hidden_dim, out_channels=out_channels)
+#         # cnn tower
+#         self.cnn = ResNet(block=BasicBlock, num_block=cnn_layers, num_classes=hidden_dim, out_channels=out_channels)
 
-        # # preference tower
-        # self.scag_module = DAB(
-        #     approximator=ScagEstimator(size_in=batch_size, size_out=metric_num), 
-        #     hard_layer=ScagModule()
-        # )
-        # self.mu = nn.Parameter(torch.zeros((metric_num, 1)))
-        # self.logvar = nn.Parameter(torch.log(torch.ones((metric_num, 1))))
-        # self.user_weights = nn.Parameter(torch.zeros((metric_num, 1)))
-        # self.pref_mlp = nn.Sequential(
-        #     nn.Linear(metric_num, metric_num), 
-        #     nn.ReLU(), 
-        #     nn.Linear(metric_num, metric_num), 
-        #     nn.ReLU(), 
-        #     nn.Linear(metric_num, metric_num), 
-        #     nn.ReLU()
-        # )
+#         # # preference tower
+#         # self.scag_module = DAB(
+#         #     approximator=ScagEstimator(size_in=batch_size, size_out=metric_num), 
+#         #     hard_layer=ScagModule()
+#         # )
+#         # self.mu = nn.Parameter(torch.zeros((metric_num, 1)))
+#         # self.logvar = nn.Parameter(torch.log(torch.ones((metric_num, 1))))
+#         # self.user_weights = nn.Parameter(torch.zeros((metric_num, 1)))
+#         # self.pref_mlp = nn.Sequential(
+#         #     nn.Linear(metric_num, metric_num), 
+#         #     nn.ReLU(), 
+#         #     nn.Linear(metric_num, metric_num), 
+#         #     nn.ReLU(), 
+#         #     nn.Linear(metric_num, metric_num), 
+#         #     nn.ReLU()
+#         # )
 
-        # # fusion layer
-        # self.fusion = AttnFusion(visual_size=16, metric_size=metric_num, hidden_dim=hidden_dim)
+#         # # fusion layer
+#         # self.fusion = AttnFusion(visual_size=16, metric_size=metric_num, hidden_dim=hidden_dim)
 
-        # prediction heads
-        # Q1: 
-        self.head1 = nn.Sequential(
-            nn.Linear(self.hidden_dim, self.hidden_dim), 
-            nn.ReLU(), 
-            nn.Linear(self.hidden_dim, self.answers_classes), 
-            # nn.Softmax()
-        )
-        # Q2: 
-        self.head2 = nn.Sequential(
-            nn.Linear(self.hidden_dim, self.hidden_dim), 
-            nn.ReLU(), 
-            nn.Linear(self.hidden_dim, self.answers_classes), 
-            # nn.Softmax()
-        )
-        # Q3: 
-        self.head3 = nn.Sequential(
-            nn.Linear(self.hidden_dim, self.hidden_dim), 
-            nn.ReLU(), 
-            nn.Linear(self.hidden_dim, self.answers_classes), 
-            # nn.Softmax()
-        )
-        # Q4: 
-        self.head4 = nn.Sequential(
-            nn.Linear(self.hidden_dim, self.hidden_dim), 
-            nn.ReLU(), 
-            nn.Linear(self.hidden_dim, self.answers_classes), 
-            # nn.Softmax()
-        )
+#         # prediction heads
+#         # Q1: 
+#         self.head1 = nn.Sequential(
+#             nn.Linear(self.hidden_dim, self.hidden_dim), 
+#             nn.ReLU(), 
+#             nn.Linear(self.hidden_dim, self.answers_classes), 
+#             # nn.Softmax()
+#         )
+#         # Q2: 
+#         self.head2 = nn.Sequential(
+#             nn.Linear(self.hidden_dim, self.hidden_dim), 
+#             nn.ReLU(), 
+#             nn.Linear(self.hidden_dim, self.answers_classes), 
+#             # nn.Softmax()
+#         )
+#         # Q3: 
+#         self.head3 = nn.Sequential(
+#             nn.Linear(self.hidden_dim, self.hidden_dim), 
+#             nn.ReLU(), 
+#             nn.Linear(self.hidden_dim, self.answers_classes), 
+#             # nn.Softmax()
+#         )
+#         # Q4: 
+#         self.head4 = nn.Sequential(
+#             nn.Linear(self.hidden_dim, self.hidden_dim), 
+#             nn.ReLU(), 
+#             nn.Linear(self.hidden_dim, self.answers_classes), 
+#             # nn.Softmax()
+#         )
 
-    def forward(self, I_hat, z, labels, x):
-        """predicting human feedbacks
+#     def forward(self, I_hat, z, labels, x):
+#         """predicting human feedbacks
 
-        :param I_hat: approximate scatterplot of z
-        :param z: dimensionality reduction result
-        :param labels: class labels for z
-        :param x: originial high dimension data
-        :return: feedbacks
-        """
+#         :param I_hat: approximate scatterplot of z
+#         :param z: dimensionality reduction result
+#         :param labels: class labels for z
+#         :param x: originial high dimension data
+#         :return: feedbacks
+#         """
 
-        # cnn tower
-        visual_feature = self.cnn(I_hat)                                    # feature for visual perception
+#         # cnn tower
+#         visual_feature = self.cnn(I_hat)                                    # feature for visual perception
 
-        # # preference tower
-        # m = self.scag_module(z)                                             # metric values
+#         # # preference tower
+#         # m = self.scag_module(z)                                             # metric values
 
-        # # tanh allows different personal preference against crowd
-        # w = F.tanh(self.user_weights).view(1,-1)
-        # prod = m * w
-        # user_preference = self.pref_mlp(prod)                               # feature for user preference
+#         # # tanh allows different personal preference against crowd
+#         # w = F.tanh(self.user_weights).view(1,-1)
+#         # prod = m * w
+#         # user_preference = self.pref_mlp(prod)                               # feature for user preference
 
-        # # feature fusion
-        # feats = self.fusion(user_preference=user_preference, visual_feature=visual_feature)
+#         # # feature fusion
+#         # feats = self.fusion(user_preference=user_preference, visual_feature=visual_feature)
 
-        feats = visual_feature
+#         feats = visual_feature
 
-        # prediction heads
-        a1 = self.head1(feats)
-        a2 = self.head2(feats)
-        a3 = self.head3(feats)
-        a4 = self.head3(feats)
-        # ...
+#         # prediction heads
+#         a1 = self.head1(feats)
+#         a2 = self.head2(feats)
+#         a3 = self.head3(feats)
+#         a4 = self.head3(feats)
+#         # ...
 
-        answers = torch.vstack([a1, a2, a3, a4])
+#         answers = torch.vstack([a1, a2, a3, a4])
 
-        # return answers, pref_weights, m
-        return answers
+#         # return answers, pref_weights, m
+#         return answers
+
+
+class HumanModel(nn.Module):
+    def __init__(self, input_size=2, hidden=100, num_classes=10):
+        super().__init__()
+        self.linear1 = nn.Linear(input_size, hidden)
+        self.linear2 = nn.Linear(hidden, num_classes)
+
+    def forward(self, x):
+        x = F.relu(self.linear1(x))
+        x = F.relu(self.linear2(x))
+
+        return x

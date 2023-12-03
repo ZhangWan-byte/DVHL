@@ -42,7 +42,8 @@ if __name__=='__main__':
     
     # training params
     parser.add_argument('--device', type=str, default='cuda', help='device cpu or cuda')
-
+    parser.add_argument('--lr', type=float, default=1e-3, help='learning rate')
+    parser.add_argument('--scheduler', type=bool, default=False, help='use lr scheduler or not')
     parser.add_argument('--batch_size_HM', type=int, default=1000, help='batch size - phase Human')
     parser.add_argument('--epochs_HM', type=int, default=100, help='training epochs - phase Human')
 
@@ -91,14 +92,18 @@ if __name__=='__main__':
     criterion_HM = nn.CrossEntropyLoss()
 
     # optimisation
-    optimizer_HM = torch.optim.Adam(model.MM_II.parameters(), lr=1e-4)
-    scheduler_HM =torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_HM, T_max=args.epochs_HM, eta_min=1e-8)
+    optimizer_HM = torch.optim.Adam(model.MM_II.parameters(), lr=args.lr)
+    if args.scheduler==True:
+        scheduler_HM = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_HM, T_max=args.epochs_HM, eta_min=1e-8)
+    else:
+        scheduler_HM = None
 
     model, train_losses, test_losses = train_epoch_HM(
         model, 
         criterion_HM, 
         optimizer_HM, 
         train_loader, 
+        test_loader, 
         epochs=args.epochs_HM, 
         scheduler_HM = scheduler_HM, 
         gamma_dab = args.gamma_dab, 

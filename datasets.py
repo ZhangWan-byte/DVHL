@@ -99,11 +99,13 @@ def get_dataset(args, data='MNIST', DR='UMAP'):
         X_train = torch.vstack(X_train)
         y_train = torch.tensor([i[1] for i in trainset])
         print("X_train.shape: {}".format(X_train.shape))        # X_train.shape: torch.Size([60000, 1, 28, 28])
+        print("y_train.shape: {}".format(y_train.shape))        # y_train.shape: torch.Size([60000])
 
         X_test = [i[0].unsqueeze(0) for i in testset]
         X_test = torch.vstack(X_test)
         y_test = torch.tensor([i[1] for i in testset])
         print("X_test.shape: {}".format(X_test.shape))          # X_test.shape: torch.Size([10000, 1, 28, 28])
+        print("y_test.shape: {}".format(y_test.shape))        # y_train.shape: torch.Size([10000])
     else:
         print("dataset not implemented!")
         exit()
@@ -163,12 +165,13 @@ def get_dataset(args, data='MNIST', DR='UMAP'):
             exit()
 
     elif args.train=='HM':
+
         feedback = torch.load(args.feedback_path)
 
-        train_dataset_HM = HumanDataset(X=X_train, y=y_train, feedback=feedback)
-        train_loader = DataLoader(train_dataset_HM, batch_size=args.batch_size_HM, shuffle=False)
+        train_dataset_HM = HumanDataset(X=X_train, y=F.one_hot(y_train).float(), feedback=feedback)
+        train_loader = DataLoader(train_dataset_HM, batch_size=args.batch_size_HM, shuffle=True)
 
-        test_dataset_HM = HumanDataset(X=X_test, y=y_test, feedback=feedback)
+        test_dataset_HM = HumanDataset(X=X_test, y=F.one_hot(y_test).float(), feedback=feedback)
         test_loader = DataLoader(test_dataset_HM, batch_size=args.batch_size_HM, shuffle=False)
 
         return train_loader, test_loader
