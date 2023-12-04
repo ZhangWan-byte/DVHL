@@ -47,13 +47,18 @@ class UMAPDataset:
         # batches_per_epoch = int(self.num_edges / self.batch_size / 5)
         for _ in range(self.batches_per_epoch):
             rand_index = np.random.randint(0, len(self.edges_to_exp) - 1, size=self.batch_size)
+            
             batch_index_to = self.edges_to_exp[rand_index]
             batch_index_from = self.edges_from_exp[rand_index]
 
             batch_to = torch.Tensor(self.data[batch_index_to]).to(self.device)
             batch_from = torch.Tensor(self.data[batch_index_from]).to(self.device)
+
+            y_to = torch.Tensor(self.labels[batch_index_to]).to(self.device)
+            y_from = torch.Tensor(self.labels[batch_index_from]).to(self.device)
+
             
-            yield (batch_to, batch_from, batch_index_to, batch_index_from, self.labels, self.feedback)
+            yield (batch_to, batch_from, batch_index_to, batch_index_from, y_to, y_from, self.feedback)
 
 
 class TSNEDataset(Dataset):

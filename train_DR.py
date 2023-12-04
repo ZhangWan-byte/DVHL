@@ -51,6 +51,7 @@ if __name__=='__main__':
     
     # training params
     parser.add_argument('--device', type=str, default='cuda', help='device cpu or cuda')
+    parser.add_argument('--lr', type=float, default=1e-3, help='learning rate')
     parser.add_argument('--batch_size_DR', type=int, default=1000, help='batch size - phase DR')
     parser.add_argument('--epochs_DR', type=int, default=20, help='training epochs - phase DR')
     parser.add_argument('--gamma', type=float, default=0.3, help='gamma * DR_loss + (1-gamma) * HM_loss')
@@ -113,10 +114,11 @@ if __name__=='__main__':
 
     # optimisation
     # optimizer_DR = PCGrad(torch.optim.Adam(model.MM_I.parameters(), lr=1e-4))
-    optimizer_DR = torch.optim.Adam([
-        {"params": model.MM_I.parameters(), "lr": 1e-4}, 
-        {"params": model.beta, "lr": 1.0}
-    ])
+    # optimizer_DR = torch.optim.Adam([
+    #     {"params": model.MM_I.parameters(), "lr": 1e-4}, 
+    #     {"params": model.beta, "lr": 1.0}
+    # ])
+    optimizer_DR = torch.optim.Adam(model.parameters(), lr=args.lr)
     # scheduler_DR =torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer_DR, T_0=20, eta_min=1e-8)
     scheduler_DR = None
 

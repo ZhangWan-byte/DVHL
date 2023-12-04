@@ -51,10 +51,10 @@ def train_epoch_DR(args, model, criterion, optimizer, scheduler, train_dataset, 
             total_train = train_dataset.batches_per_epoch
             total_test = test_dataset.batches_per_epoch
 
-            for batch_to, batch_from, batch_index_to, batch_index_from, labels, feedback in tqdm(train_dataset.get_batches(), total=total_train):
+            for batch_to, batch_from, batch_index_to, batch_index_from, y_to, y_from, feedback in tqdm(train_dataset.get_batches(), total=total_train):
             
-                y_to = labels[batch_index_to].to(torch.device(device))
-                y_from = labels[batch_index_from].to(torch.device(device))
+                # y_to = labels[batch_index_to].to(torch.device(device))
+                # y_from = labels[batch_index_from].to(torch.device(device))
 
                 optimizer.zero_grad()
             
@@ -73,6 +73,8 @@ def train_epoch_DR(args, model, criterion, optimizer, scheduler, train_dataset, 
                 # loss_HM = F.cross_entropy(input=answers, target=best_labels.to(torch.device(device)))
                 loss_HM = F.cross_entropy(pred_y_to, y_to) + F.cross_entropy(pred_y_from, y_from)
 
+                loss_l2 = 1e-3 * sum(p.pow(2).sum() for p in model.MM_I.parameters())
+
                 # # metric loss
                 # weights_metrics = get_weights(pref_weights)
                 # loss_metrics = torch.mean(pred_metrics * weights_metrics)
@@ -85,15 +87,14 @@ def train_epoch_DR(args, model, criterion, optimizer, scheduler, train_dataset, 
                 # # PCGrad
                 # loss = [loss_DR, loss_HM]
                 # optimizer.pc_backward(loss)
-                loss = loss_DR + loss_HM
+                loss = gamma * loss_DR + (1-gamma) * loss_HM
             
-                # train_loss.append((loss.item(), loss_DR.item(), loss_HM.item(), loss_metrics.item()))
-                train_loss.append((loss_DR.item(), loss_HM.item()))
-            
-                # loss.backward()
+                loss.backward()
             
                 optimizer.step()
         
+                train_loss.append((loss_DR.item(), loss_HM.item()))
+
         elif args.DR == "t-SNE":
             
             for data, labels, feedback in tqdm(train_loader):
@@ -172,12 +173,12 @@ def train_epoch_DR(args, model, criterion, optimizer, scheduler, train_dataset, 
             labels_y = []
             if args.DR == 'UMAP':
             
-                for batch_to, batch_from, batch_index_to, batch_index_from, labels, feedback in tqdm(test_dataset.get_batches(), total=total_test):
+                for batch_to, batch_from, batch_index_to, batch_index_from, y_to, y_from, feedback in tqdm(test_dataset.get_batches(), total=total_test):
                 
-                    y_to = labels[batch_index_to].to(torch.device(device))
-                    y_from = labels[batch_index_from].to(torch.device(device))
+                    # y_to = labels[batch_index_to].to(torch.device(device))
+                    # y_from = labels[batch_index_from].to(torch.device(device))
 
-                    optimizer.zero_grad()
+                    # optimizer.zero_grad()
                 
                     # embedding_to, answers, pref_weights, pred_metrics = model(batch_to, y_to)
                     # embedding_from, answers, pref_weights, pred_metrics = model(batch_from, y_from)
@@ -193,7 +194,6 @@ def train_epoch_DR(args, model, criterion, optimizer, scheduler, train_dataset, 
                     # loss_HM = torch.zeros(1).cuda()
 
                     loss_HM = F.cross_entropy(pred_y_to, y_to) + F.cross_entropy(pred_y_from, y_from)
-                    print(pred_y_to.shape, y_to.shape)
                     preds_y.append(torch.argmax(pred_y_to.detach().cpu()).numpy())
                     preds_y.append(torch.argmax(pred_y_from.detach().cpu()).numpy())
                     
@@ -255,7 +255,7 @@ def train_epoch_DR(args, model, criterion, optimizer, scheduler, train_dataset, 
             print('DR eval - epoch: {}, DR loss: {}, HM_loss: {}, acc: {}'.format(
                 epoch, eval_losses[-1][0], eval_losses[-1][1], test_acc[-1]))
 
-            torch.save(model.MM_I.state_dict(), os.path.join(result_path, 'DR_weights_epoch{}.pt'.format(epoch)))
+            # torch.save(model.MM_I.state_dict(), os.path.join(result_path, 'DR_weights_epoch{}.pt'.format(epoch)))
 
             # if (gamma * eval_losses[-1][0] + (1-gamma) * eval_losses[-1][1]) < sum(best_eval_losses):
             if eval_losses[-1][1] < best_eval_losses[1]:
@@ -263,6 +263,8 @@ def train_epoch_DR(args, model, criterion, optimizer, scheduler, train_dataset, 
                 best_epoch = epoch
                 best_eval_losses = eval_losses[-1]
                 best_train_loss = train_losses[-1]
+                torch.save(torch.tensor(np.hstack(preds_y)), os.path.join(result_path, 'preds_y.pt'))
+                torch.save(torch.tensor(np.hstack(labels_y)), os.path.join(result_path, 'labels_y.pt'))
 
         model.train()
 
