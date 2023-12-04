@@ -51,10 +51,8 @@ if __name__=='__main__':
     
     # training params
     parser.add_argument('--device', type=str, default='cuda', help='device cpu or cuda')
-    
     parser.add_argument('--batch_size_DR', type=int, default=1000, help='batch size - phase DR')
     parser.add_argument('--epochs_DR', type=int, default=20, help='training epochs - phase DR')
-
     parser.add_argument('--gamma', type=float, default=0.3, help='gamma * DR_loss + (1-gamma) * HM_loss')
 
     # data

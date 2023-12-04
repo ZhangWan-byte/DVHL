@@ -27,6 +27,7 @@ def train_epoch_DR(args, model, criterion, optimizer, scheduler, train_dataset, 
 
     train_losses = []
     eval_losses = []
+    test_acc = []
 
     if args.DR != 'UMAP':
         train_loader = DataLoader(train_dataset, batch_size=args.batch_size_DR, shuffle=True)
@@ -59,15 +60,18 @@ def train_epoch_DR(args, model, criterion, optimizer, scheduler, train_dataset, 
             
                 # embedding_to, answers, pref_weights, pred_metrics = model(batch_to, y_to)
                 # embedding_from, answers, pref_weights, pred_metrics = model(batch_from, y_from)
-                embedding_to, answers = model(batch_to, y_to)
-                embedding_from, answers = model(batch_from, y_from)
+                # embedding_to, answers = model(batch_to, y_to)
+                # embedding_from, answers = model(batch_from, y_from)
+                embedding_to, pred_y_to = model(batch_to, y_to)
+                embedding_from, pred_y_from = model(batch_from, y_from)
 
                 loss_DR = criterion(embedding_to, embedding_from)
 
                 # best_labels = torch.ones((answers.shape[0])).int() * 4
                 # loss_HM = ord_loss(logits=answers, labels=best_labels.to(torch.device(device)))
-                best_labels = torch.ones((answers.shape[0])).long() * 4
-                loss_HM = F.cross_entropy(input=answers, target=best_labels.to(torch.device(device)))
+                # best_labels = torch.ones((answers.shape[0])).long() * 4
+                # loss_HM = F.cross_entropy(input=answers, target=best_labels.to(torch.device(device)))
+                loss_HM = F.cross_entropy(pred_y_to, y_to) + F.cross_entropy(pred_y_from, y_from)
 
                 # # metric loss
                 # weights_metrics = get_weights(pref_weights)
@@ -78,9 +82,10 @@ def train_epoch_DR(args, model, criterion, optimizer, scheduler, train_dataset, 
 
                 # loss = alpha * loss_DR + (1-alpha) * loss_HM
 
-                # PCGrad
-                loss = [loss_DR, loss_HM]
-                optimizer.pc_backward(loss)
+                # # PCGrad
+                # loss = [loss_DR, loss_HM]
+                # optimizer.pc_backward(loss)
+                loss = loss_DR + loss_HM
             
                 # train_loss.append((loss.item(), loss_DR.item(), loss_HM.item(), loss_metrics.item()))
                 train_loss.append((loss_DR.item(), loss_HM.item()))
@@ -154,8 +159,8 @@ def train_epoch_DR(args, model, criterion, optimizer, scheduler, train_dataset, 
         #     epoch, train_losses[-1][0], train_losses[-1][1], train_losses[-1][2]))
         # print('epoch: {}, DR loss: {}, HM_loss: {}, lr: {}'.format(
         #     epoch, train_losses[-1][0], train_losses[-1][1], scheduler.get_lr()[0]))
-        print('epoch: {}, DR loss: {}, HM_loss: {}'.format(
-            epoch, train_losses[-1][0], train_losses[-1][1]))
+        # print('epoch: {}, DR loss: {}, HM_loss: {}'.format(
+        #     epoch, train_losses[-1][0], train_losses[-1][1]))
 
         # evaluate
         with torch.no_grad():
@@ -163,7 +168,8 @@ def train_epoch_DR(args, model, criterion, optimizer, scheduler, train_dataset, 
             model.eval()
 
             eval_loss = []
-
+            preds_y = []
+            labels_y = []
             if args.DR == 'UMAP':
             
                 for batch_to, batch_from, batch_index_to, batch_index_from, labels, feedback in tqdm(test_dataset.get_batches(), total=total_test):
@@ -175,16 +181,24 @@ def train_epoch_DR(args, model, criterion, optimizer, scheduler, train_dataset, 
                 
                     # embedding_to, answers, pref_weights, pred_metrics = model(batch_to, y_to)
                     # embedding_from, answers, pref_weights, pred_metrics = model(batch_from, y_from)
-                    embedding_to, answers  = model(batch_to, y_to)
-                    embedding_from, answers  = model(batch_from, y_from)
+                    embedding_to, pred_y_to  = model(batch_to, y_to)
+                    embedding_from, pred_y_from  = model(batch_from, y_from)
                 
                     loss_DR = criterion(embedding_to, embedding_from)
 
-                    # best_labels = torch.ones((answers.shape[0])).int() * 4
-                    # loss_HM = ord_loss(logits=answers, labels=best_labels.to(torch.device(device)))
-                    best_labels = torch.ones((answers.shape[0])).long() * 4
-                    # loss_HM = F.cross_entropy(input=answers, target=best_labels.to(torch.device(device)))
-                    loss_HM = torch.zeros(1).cuda()
+                    # # best_labels = torch.ones((answers.shape[0])).int() * 4
+                    # # loss_HM = ord_loss(logits=answers, labels=best_labels.to(torch.device(device)))
+                    # best_labels = torch.ones((answers.shape[0])).long() * 4
+                    # # loss_HM = F.cross_entropy(input=answers, target=best_labels.to(torch.device(device)))
+                    # loss_HM = torch.zeros(1).cuda()
+
+                    loss_HM = F.cross_entropy(pred_y_to, y_to) + F.cross_entropy(pred_y_from, y_from)
+                    print(pred_y_to.shape, y_to.shape)
+                    preds_y.append(torch.argmax(pred_y_to.detach().cpu()).numpy())
+                    preds_y.append(torch.argmax(pred_y_from.detach().cpu()).numpy())
+                    
+                    labels_y.append(torch.argmax(y_to.detach().cpu()).numpy())
+                    labels_y.append(torch.argmax(y_from.detach().cpu()).numpy())
 
                     # # metric loss
                     # weights_metrics = get_weights(pref_weights)
@@ -228,13 +242,18 @@ def train_epoch_DR(args, model, criterion, optimizer, scheduler, train_dataset, 
                 print("wrong args.DR!")
                 exit()
 
+            acc = sklearn.metrics.accuracy_score(y_pred=np.hstack(preds_y), y_true=np.hstack(labels_y))
+            test_acc.append(acc)
             DR_loss = np.mean([i[0] for i in eval_loss])
             HM_loss = np.mean([i[1] for i in eval_loss])
             # Metrics_loss = np.mean([i[2] for i in eval_loss])
 
             eval_losses.append((DR_loss, HM_loss))
 
-            print('DR eval - epoch: {}, DR loss: {}, HM_loss: {}'.format(epoch, eval_losses[-1][0], eval_losses[-1][1]))
+            print('DR train - epoch: {}, DR loss: {}, HM_loss: {}'.format(
+                epoch, train_losses[-1][0], train_losses[-1][1]))
+            print('DR eval - epoch: {}, DR loss: {}, HM_loss: {}, acc: {}'.format(
+                epoch, eval_losses[-1][0], eval_losses[-1][1], test_acc[-1]))
 
             torch.save(model.MM_I.state_dict(), os.path.join(result_path, 'DR_weights_epoch{}.pt'.format(epoch)))
 
@@ -275,6 +294,7 @@ def train_epoch_HM(model, criterion, optimizer, train_loader, test_loader, epoch
 
     train_losses = []
     test_losses = []
+    test_acc = []
 
     # training and testing
     for epoch in range(epochs):
@@ -371,9 +391,10 @@ def train_epoch_HM(model, criterion, optimizer, train_loader, test_loader, epoch
             # print("pref_weights: ", pref_weights)
             # print("m: ", m)
             acc = sklearn.metrics.accuracy_score(y_true=np.hstack(y_trues), y_pred=np.hstack(y_preds))
+            test_acc.append(acc)
             lr = scheduler_HM.get_lr()[0] if scheduler_HM!=None else optimizer.param_groups[0]['lr']
             print("HM - epoch: {}, train_loss: {}, test_loss: {}, test_acc: {}, lr: {}".format(
-                epoch, train_losses[-1], test_losses[-1], acc, lr))
+                epoch, train_losses[-1], test_losses[-1], test_acc[-1], lr))
 
             # if sum(test_losses[-1]) < sum(best_test_loss):
             if test_losses[-1] < best_test_loss:
@@ -382,11 +403,11 @@ def train_epoch_HM(model, criterion, optimizer, train_loader, test_loader, epoch
                 best_epoch = epoch
                 best_test_loss = test_losses[-1]
                 best_train_loss = train_losses[-1]
-                best_test_acc = acc
+                best_test_acc = test_acc[-1]
         
         model.train()
 
     print("best_epoch: {}, best_train_loss: {}, best_test_loss: {}, best_acc: {}".format(
         best_epoch, best_train_loss, best_test_loss, best_test_acc))
 
-    return model, train_losses, test_losses
+    return model, train_losses, test_losses, test_acc

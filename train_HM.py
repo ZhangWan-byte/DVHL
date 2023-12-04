@@ -39,20 +39,19 @@ if __name__=='__main__':
         help='weights to initialise DR model')
     parser.add_argument('--MM_II_wPATH', type=str, default="./data/pretrain_results/HM_weights.pt", \
         help='weights to initialise human model')
+    parser.add_argument('--dataset', type=str, default="MNIST", \
+        help='dataset -- MNIST/self-defined/...')
+    parser.add_argument('--DR', type=str, default='UMAP', help='t-SNE/UMAP')
     
     # training params
-    parser.add_argument('--DR', type=str, default='UMAP', help='t-SNE/UMAP')
     parser.add_argument('--device', type=str, default='cuda', help='device cpu or cuda')
     parser.add_argument('--lr', type=float, default=1e-3, help='learning rate')
     parser.add_argument('--scheduler', type=bool, default=False, help='use lr scheduler or not')
     parser.add_argument('--batch_size_HM', type=int, default=100, help='batch size - phase Human')
     parser.add_argument('--epochs_HM', type=int, default=100, help='training epochs - phase Human')
-
     parser.add_argument('--gamma_dab', type=float, default=10, help="weight of dab loss")
 
     # data
-    parser.add_argument('--dataset', type=str, default="MNIST", \
-        help='dataset -- MNIST/self-defined/...')
     parser.add_argument('--dataset_path', type=str, default="./results/231204144400/data1.pt", \
         help='path of self-defined dataset')
     parser.add_argument('--feedback_path', type=str, default="./results/231016000038_I_0/feedback.pt", \
@@ -105,7 +104,7 @@ if __name__=='__main__':
     else:
         scheduler_HM = None
 
-    model, train_losses, test_losses = train_epoch_HM(
+    model, train_losses, test_losses, test_acc = train_epoch_HM(
         model, 
         criterion_HM, 
         optimizer_HM, 
@@ -121,3 +120,4 @@ if __name__=='__main__':
     # torch.save(model.MM_II.state_dict(), os.path.join(result_path, 'HM_weights_{}.pt'.format(args.exp_name)))
     torch.save(torch.tensor(train_losses), os.path.join(result_path, 'train_losses_{}.pt'.format(args.exp_name)))
     torch.save(torch.tensor(test_losses), os.path.join(result_path, 'test_losses_{}.pt'.format(args.exp_name)))
+    torch.save(torch.tensor(test_acc), os.path.join(result_path, 'test_acc_{}.pt'.format(args.exp_name)))
