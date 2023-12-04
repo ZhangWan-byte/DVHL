@@ -41,15 +41,20 @@ if __name__=='__main__':
         help='weights to initialise human model')
     
     # training params
+    parser.add_argument('--DR', type=str, default='UMAP', help='t-SNE/UMAP')
     parser.add_argument('--device', type=str, default='cuda', help='device cpu or cuda')
     parser.add_argument('--lr', type=float, default=1e-3, help='learning rate')
     parser.add_argument('--scheduler', type=bool, default=False, help='use lr scheduler or not')
-    parser.add_argument('--batch_size_HM', type=int, default=1000, help='batch size - phase Human')
+    parser.add_argument('--batch_size_HM', type=int, default=100, help='batch size - phase Human')
     parser.add_argument('--epochs_HM', type=int, default=100, help='training epochs - phase Human')
 
     parser.add_argument('--gamma_dab', type=float, default=10, help="weight of dab loss")
 
     # data
+    parser.add_argument('--dataset', type=str, default="MNIST", \
+        help='dataset -- MNIST/self-defined/...')
+    parser.add_argument('--dataset_path', type=str, default="./results/231204144400/data1.pt", \
+        help='path of self-defined dataset')
     parser.add_argument('--feedback_path', type=str, default="./results/231016000038_I_0/feedback.pt", \
         help='path of human feedback')
 
@@ -74,25 +79,27 @@ if __name__=='__main__':
 
 
     # human model
-    model = MMModel(
-        MM_I_wPATH=args.MM_I_wPATH, 
-        MM_II_wPATH=args.MM_II_wPATH, 
-        cnn_layers=[1,1,1,1], 
-        VI_size=100, 
-        freeze=(True, False), 
-        batch_size=args.batch_size_HM, 
-        device=torch.device(args.device), 
-        DR='t-SNE'
-    )
+    # model = MMModel(
+    #     MM_I_wPATH=args.MM_I_wPATH, 
+    #     MM_II_wPATH=args.MM_II_wPATH, 
+    #     cnn_layers=[1,1,1,1], 
+    #     VI_size=100, 
+    #     freeze=(True, False), 
+    #     batch_size=args.batch_size_HM, 
+    #     device=torch.device(args.device), 
+    #     DR='UMAP'
+    # )
+    model = HumanModel(input_size=2, hidden=100, num_classes=10).cuda()
 
     # get dataloader
-    train_loader, test_loader = get_dataset(args=args, data='MNIST', DR='UMAP')
+    train_loader, test_loader = get_dataset(args=args, data=args.dataset, DR=args.DR)
 
     # loss function
     criterion_HM = nn.CrossEntropyLoss()
 
     # optimisation
-    optimizer_HM = torch.optim.Adam(model.MM_II.parameters(), lr=args.lr)
+    # optimizer_HM = torch.optim.Adam(model.MM_II.parameters(), lr=args.lr)
+    optimizer_HM = torch.optim.Adam(model.parameters(), lr=args.lr)
     if args.scheduler==True:
         scheduler_HM = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_HM, T_max=args.epochs_HM, eta_min=1e-8)
     else:

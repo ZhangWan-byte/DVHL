@@ -106,6 +106,17 @@ def get_dataset(args, data='MNIST', DR='UMAP'):
         y_test = torch.tensor([i[1] for i in testset])
         print("X_test.shape: {}".format(X_test.shape))          # X_test.shape: torch.Size([10000, 1, 28, 28])
         print("y_test.shape: {}".format(y_test.shape))        # y_train.shape: torch.Size([10000])
+    
+    elif data=='self-defined':
+        data = torch.load(args.dataset_path)
+        data = data[torch.randperm(data.shape[0])]
+        X_train, y_train = data[:50000, :2].float(), data[:50000, 2].long()
+        X_test, y_test = data[50000:, :2].float(), data[50000:, 2].long()
+        print("X_train.shape: {}".format(X_train.shape))        # X_train.shape: torch.Size([50000, 1, 28, 28])
+        print("y_train.shape: {}".format(y_train.shape))        # y_train.shape: torch.Size([50000])
+        print("X_test.shape: {}".format(X_test.shape))          # X_test.shape: torch.Size([<10000, 1, 28, 28])
+        print("y_test.shape: {}".format(y_test.shape))          # y_train.shape: torch.Size([<10000])
+    
     else:
         print("dataset not implemented!")
         exit()
@@ -116,7 +127,7 @@ def get_dataset(args, data='MNIST', DR='UMAP'):
         # DR model is UMAP
         if DR=='UMAP':
             # dataset preparation
-            train_graph_constructor =  ConstructUMAPGraph(
+            train_graph_constructor = ConstructUMAPGraph(
                 metric='euclidean', 
                 n_neighbors=args.n_neighbors, 
                 batch_size=args.batch_size_DR, 

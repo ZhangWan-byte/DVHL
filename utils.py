@@ -47,7 +47,7 @@ def draw_z(z, cls, s=25, x_highlight=None, y_highlight=None, save_path=None, dis
     tsne_df = tsne_df.sort_values("label")
 
     # draw
-    plt.figure(dpi=1500)
+    plt.figure(figsize=(10, 10), dpi=1500)
     
     # main figure
     sn.FacetGrid(tsne_df, hue="label", height=6, palette="Spectral").map(plt.scatter, "Dim_1", "Dim_2", s=s).add_legend()

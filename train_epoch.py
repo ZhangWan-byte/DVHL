@@ -252,6 +252,7 @@ def train_epoch_DR(args, model, criterion, optimizer, scheduler, train_dataset, 
     return model, train_losses, eval_losses
 
 
+
 # epoch training for human model
 def train_epoch_HM(model, criterion, optimizer, train_loader, test_loader, epochs=20, device='cuda', scheduler_HM=None, gamma_dab=10, args=None, result_path=None):
     """train MM_II and freeze MM_I
@@ -278,11 +279,11 @@ def train_epoch_HM(model, criterion, optimizer, train_loader, test_loader, epoch
     # training and testing
     for epoch in range(epochs):
 
-        # fix DR model, train Human Model
-        for param in model.MM_I.parameters():
-            param.requires_grad = False
-        for param in model.MM_II.parameters():
-            param.requires_grad = True
+        # # fix DR model, train Human Model
+        # for param in model.MM_I.parameters():
+        #     param.requires_grad = False
+        # for param in model.MM_II.parameters():
+        #     param.requires_grad = True
         
         # # fix crowd preference, only learn personal
         # model.MM_II.mu.requires_grad = False
@@ -296,7 +297,7 @@ def train_epoch_HM(model, criterion, optimizer, train_loader, test_loader, epoch
             
             X.requires_grad = True
             # pred_z, pred_answers, pref_weights, pred_metrics = model(x=X.to(torch.device(device)), labels=y.to(torch.device(device)))
-            pred_z, pred_y = model(X.to(torch.device(device)), labels=y.to(torch.device(device)))
+            pred_y = model(X.to(torch.device(device)))
             
             # # loss_Qs = criterion(input=pred_answers, target=feedback[0].squeeze().to(torch.device(device)))
             # loss_Qs = ord_loss(logits=answers, labels=feedbacks.squeeze().cuda())
@@ -305,7 +306,8 @@ def train_epoch_HM(model, criterion, optimizer, train_loader, test_loader, epoch
 
             # train_loss.append((loss.item(), loss_Qs.item(), loss_DAB.item()))
 
-            loss = criterion(pred_y, y.to(torch.device(device))) + 1e-3 * sum(p.pow(2).sum() for p in model.MM_II.parameters())
+            loss = criterion(pred_y, y.to(torch.device(device))) + 1e-3 * sum(p.pow(2).sum() for p in model.parameters())
+            # 1e-3 * sum(p.pow(2).sum() for p in model.MM_II.parameters())
             
             loss.backward()
         
@@ -350,7 +352,8 @@ def train_epoch_HM(model, criterion, optimizer, train_loader, test_loader, epoch
     
                 # test_loss.append((loss_Qs.item(), loss_DAB.item()))
 
-                pred_z, pred_y = model(X.to(torch.device(device)), labels=y.to(torch.device(device)))
+                # pred_z, pred_y = model(X.to(torch.device(device)), labels=y.to(torch.device(device)))
+                pred_y = model(X.to(torch.device(device)))
 
                 y_preds.append(torch.argmax(pred_y.detach().cpu(), dim=1).numpy())
                 y_trues.append(torch.argmax(y.detach().cpu(), dim=1).numpy())
@@ -374,7 +377,8 @@ def train_epoch_HM(model, criterion, optimizer, train_loader, test_loader, epoch
 
             # if sum(test_losses[-1]) < sum(best_test_loss):
             if test_losses[-1] < best_test_loss:
-                torch.save(model.MM_II.state_dict(), os.path.join(result_path, 'HM_weights_{}.pt'.format(args.exp_name)))
+                # torch.save(model.MM_II.state_dict(), os.path.join(result_path, 'HM_weights_{}.pt'.format(args.exp_name)))
+                torch.save(model.state_dict(), os.path.join(result_path, 'HM_weights_{}.pt'.format(args.exp_name)))
                 best_epoch = epoch
                 best_test_loss = test_losses[-1]
                 best_train_loss = train_losses[-1]
