@@ -26,7 +26,7 @@ from models import *
 from utils import *
 from datasets import *
 
-from train_epoch import train_epoch_HM
+from train_epoch_HM import train_epoch_HM
 
 
 if __name__=='__main__':
@@ -104,7 +104,7 @@ if __name__=='__main__':
     else:
         scheduler_HM = None
 
-    model, train_losses, test_losses, test_acc = train_epoch_HM(
+    model, train_losses, test_losses = train_epoch_HM(
         model, 
         criterion_HM, 
         optimizer_HM, 
@@ -117,7 +117,5 @@ if __name__=='__main__':
         result_path=result_path
     )
 
-    # torch.save(model.MM_II.state_dict(), os.path.join(result_path, 'HM_weights_{}.pt'.format(args.exp_name)))
     torch.save(torch.tensor(train_losses), os.path.join(result_path, 'train_losses_{}.pt'.format(args.exp_name)))
     torch.save(torch.tensor(test_losses), os.path.join(result_path, 'test_losses_{}.pt'.format(args.exp_name)))
-    torch.save(torch.tensor(test_acc), os.path.join(result_path, 'test_acc_{}.pt'.format(args.exp_name)))

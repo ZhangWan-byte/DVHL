@@ -26,7 +26,7 @@ from models import *
 from utils import *
 from datasets import *
 
-from train_epoch import train_epoch_DR
+from train_epoch_DR import train_epoch_DR
 
 
 if __name__=='__main__':
