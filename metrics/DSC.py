@@ -4,8 +4,8 @@
 # This implementation has been written by Adrien Bibal (University of Namur).
 
 import numpy as np
+from tqdm import tqdm
 from scipy.spatial.distance import pdist, squareform
-
 
 # Compute the centroid of each label
 def get_centroids(visu, labels):
@@ -33,7 +33,7 @@ def compute(visu, labels):
     centroids = get_centroids(visu, labels)
 
     misclassified_counter = 0.0
-    for index in range(len(visu)):
+    for index in tqdm(range(len(visu))):
         distance_centroid = pdist([visu[index], centroids[labels[index]]])
         min_distance = distance_centroid  # init
         for label in centroids.keys():

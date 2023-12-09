@@ -4,7 +4,7 @@
 # This implementation has been written by Adrien Bibal (University of Namur).
 
 import numpy as np
-
+from tqdm import tqdm
 from scipy.spatial.distance import pdist, squareform
 
 # This function computes the trustworthiness for a particular K, as in Venna et al.'s paper
@@ -40,7 +40,7 @@ def compute(dataset, visu):
 	# Remove the comparison of each point with itself. As the lists are sorted, O(n) in most of the cases.
 	I_dataset_temp = []
 	I_projection_temp = []
-	for i in range(I_dataset.shape[0]):
+	for i in tqdm(range(I_dataset.shape[0])):
 		I_dataset_temp.append(np.delete(I_dataset[i, :], np.where(I_dataset[i, :] == i)[0]))
 		I_projection_temp.append(np.delete(I_projection[i, :], np.where(I_projection[i, :] == i)[0]))
 	
@@ -49,7 +49,7 @@ def compute(dataset, visu):
 
 	# In the paper, no explicit constraints are put on the size of the neighborhood.
 	# However, the two main equations restrict k < (2*N - 1)/3
-	for k in range(1, int(((2*N)-1)/3)):
+	for k in tqdm(range(1, int(((2*N)-1)/3))):
 		projection_K = I_projection[:, :k]
 		dataset_K = I_dataset[:, :k]
 

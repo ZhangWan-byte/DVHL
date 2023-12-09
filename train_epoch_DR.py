@@ -71,9 +71,9 @@ def train_epoch_DR(args, model, criterion, optimizer, scheduler, train_dataset, 
                 # best_labels = torch.ones((answers.shape[0])).long() * 4
                 # loss_HM = F.cross_entropy(input=answers, target=best_labels.to(torch.device(device)))
 
-                # loss_HM = F.cross_entropy(pred_y_to, y_to) + F.cross_entropy(pred_y_from, y_from)
-                loss_HM = focal_loss(outputs=pred_y_to, targets=y_to, alpha=1, gamma=10) + \
-                    focal_loss(outputs=pred_y_from, targets=y_from, alpha=1, gamma=10)
+                loss_HM = F.cross_entropy(pred_y_to, y_to) + F.cross_entropy(pred_y_from, y_from)
+                # loss_HM = focal_loss(outputs=pred_y_to, targets=y_to, alpha=1, gamma=10) + \
+                #     focal_loss(outputs=pred_y_from, targets=y_from, alpha=1, gamma=10)
 
                 loss_l2 = 1e-3 * sum(p.pow(2).sum() for p in model.MM_I.parameters())
 
@@ -195,9 +195,9 @@ def train_epoch_DR(args, model, criterion, optimizer, scheduler, train_dataset, 
                     # # loss_HM = F.cross_entropy(input=answers, target=best_labels.to(torch.device(device)))
                     # loss_HM = torch.zeros(1).cuda()
 
-                    # loss_HM = F.cross_entropy(pred_y_to, y_to) + F.cross_entropy(pred_y_from, y_from)
-                    loss_HM = focal_loss(outputs=pred_y_to, targets=y_to, alpha=1, gamma=10) + \
-                        focal_loss(outputs=pred_y_from, targets=y_from, alpha=1, gamma=10)
+                    loss_HM = F.cross_entropy(pred_y_to, y_to) + F.cross_entropy(pred_y_from, y_from)
+                    # loss_HM = focal_loss(outputs=pred_y_to, targets=y_to, alpha=1, gamma=10) + \
+                    #     focal_loss(outputs=pred_y_from, targets=y_from, alpha=1, gamma=10)
 
                     preds_y.append(torch.argmax(pred_y_to.detach().cpu()).numpy())
                     preds_y.append(torch.argmax(pred_y_from.detach().cpu()).numpy())

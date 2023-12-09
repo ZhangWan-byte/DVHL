@@ -5,6 +5,7 @@
 
 import networkx as nx
 import numpy as np
+from tqdm import tqdm
 from sklearn.neighbors import kneighbors_graph
 
 
@@ -22,7 +23,7 @@ def compute(df, k=5):
     # G_orig = get_knntree(df[['x','y']], k)
     G_new = get_knntree(df.iloc[:, [0, 1]], k)
     score = []
-    for i, row in df.iterrows():
+    for i, row in tqdm(df.iterrows()):
         label = row["labels"]
         n_new = set([n for n in G_new.neighbors(i)])
         n_class = set(df.loc[df["labels"] == label, :].index)
