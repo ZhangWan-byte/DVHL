@@ -9,12 +9,12 @@ import numpy as np
 
 class ConstructUMAPGraph:
 
-    def __init__(self, metric='euclidean', n_neighbors=10, batch_size=1000, random_state=42):
+    def __init__(self, metric='euclidean', n_neighbors=10, batch_size=1000, random_state=42, mode=0):
         self.batch_size=batch_size
         self.random_state=random_state
         self.metric=metric # distance metric
         self.n_neighbors=n_neighbors # number of neighbors for computing k-neighbor graph
-
+        self.mode=mode
         pass
 
     @staticmethod
@@ -77,7 +77,7 @@ class ConstructUMAPGraph:
         # get nearest neighbors
         nnd = NNDescent(
             X.reshape((len(X), np.product(np.shape(X)[1:]))),
-            n_neighbors=self.n_neighbors,
+            n_neighbors=60,
             metric=self.metric,
             n_trees=n_trees,
             n_iters=n_iters,
@@ -87,6 +87,22 @@ class ConstructUMAPGraph:
         # get indices and distances
         knn_indices, knn_dists = nnd.neighbor_graph
 
+        # self-define sampling strategy
+        if self.mode==1:
+            # random
+            random_idx = np.random.choice(np.arange(60), size=self.n_neighbors-1)
+            knn_indices = np.hstack([knn_indices[:, 0].reshape(-1,1), knn_indices[:, sorted(random_idx)]])
+            knn_dists = np.float32(np.hstack([knn_dists[:, 0].reshape(-1,1), knn_dists[:, sorted(random_idx)]]))
+
+        elif self.mode==2:
+            # furtherest
+            random_idx = np.arange(60-self.n_neighbors+1, 60)
+            knn_indices = np.hstack([knn_indices[:, 0].reshape(-1,1), knn_indices[:, sorted(random_idx)]])
+            knn_dists = np.float32(np.hstack([knn_dists[:, 0].reshape(-1,1), knn_dists[:, sorted(random_idx)]]))
+
+        else:
+            pass
+
         # build fuzzy_simplicial_set
         umap_graph, sigmas, rhos = fuzzy_simplicial_set(
             X=X,
@@ -94,7 +110,7 @@ class ConstructUMAPGraph:
             metric=self.metric,
             random_state=self.random_state,
             knn_indices=knn_indices,
-            knn_dists=knn_dists,
+            knn_dists=knn_dists.astype(np.float32, order='C'),
         )
 
         graph, epochs_per_sample, head, tail, weight, n_vertices = self.get_graph_elements(umap_graph, None)
