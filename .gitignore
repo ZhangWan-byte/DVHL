@@ -5,3 +5,5 @@
 *.pyc
 /DRflow-master
 /results
+*.npy
+*.pt
