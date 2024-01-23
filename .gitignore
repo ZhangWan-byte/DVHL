@@ -1,10 +1,9 @@
 /.ipynb_checkpoints
 /data
-/encoder_weights.pt
 /__pycache__
-*.pyc
 /DRflow-master
 /results
+*.pyc
 *.npy
 *.pt
 02-policy-gradient.ipynb
