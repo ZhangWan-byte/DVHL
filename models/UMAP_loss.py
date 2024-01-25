@@ -88,20 +88,23 @@ class ConstructUMAPGraph:
         knn_indices, knn_dists = nnd.neighbor_graph
 
         # self-define sampling strategy
-        if self.mode==1:
+        if self.mode==0:
+            # nearest 20 (default)
+            idx = np.arange(1, self.n_neighbors+1)
+
+        elif self.mode==1:
             # random
-            random_idx = np.random.choice(np.arange(60), size=self.n_neighbors-1)
-            knn_indices = np.hstack([knn_indices[:, 0].reshape(-1,1), knn_indices[:, sorted(random_idx)]])
-            knn_dists = np.float32(np.hstack([knn_dists[:, 0].reshape(-1,1), knn_dists[:, sorted(random_idx)]]))
+            idx = np.random.choice(np.arange(60), size=self.n_neighbors)
 
         elif self.mode==2:
-            # furtherest
-            random_idx = np.arange(60-self.n_neighbors+1, 60)
-            knn_indices = np.hstack([knn_indices[:, 0].reshape(-1,1), knn_indices[:, sorted(random_idx)]])
-            knn_dists = np.float32(np.hstack([knn_dists[:, 0].reshape(-1,1), knn_dists[:, sorted(random_idx)]]))
+            # furtherest 20
+            idx = np.arange(60-self.n_neighbors, 60)
 
         else:
             pass
+
+        knn_indices = np.hstack([knn_indices[:, 0].reshape(-1,1), knn_indices[:, sorted(idx)]])
+        knn_dists = np.float32(np.hstack([knn_dists[:, 0].reshape(-1,1), knn_dists[:, sorted(idx)]]))
 
         # build fuzzy_simplicial_set
         umap_graph, sigmas, rhos = fuzzy_simplicial_set(
