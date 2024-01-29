@@ -9,12 +9,13 @@ import numpy as np
 
 class ConstructUMAPGraph:
 
-    def __init__(self, metric='euclidean', n_neighbors=10, batch_size=1000, random_state=42, mode=0):
+    def __init__(self, metric='euclidean', n_neighbors=10, batch_size=1000, random_state=42, mode=0, policy=None):
         self.batch_size=batch_size
         self.random_state=random_state
         self.metric=metric # distance metric
         self.n_neighbors=n_neighbors # number of neighbors for computing k-neighbor graph
         self.mode=mode
+        self.policy = policy
         pass
 
     @staticmethod
@@ -77,11 +78,11 @@ class ConstructUMAPGraph:
         # get nearest neighbors
         nnd = NNDescent(
             X.reshape((len(X), np.product(np.shape(X)[1:]))),
-            n_neighbors=60,
+            n_neighbors=100,
             metric=self.metric,
             n_trees=n_trees,
             n_iters=n_iters,
-            max_candidates=60,
+            max_candidates=20,
             verbose=True
         )
         # get indices and distances
@@ -91,20 +92,51 @@ class ConstructUMAPGraph:
         if self.mode==0:
             # nearest 20 (default)
             idx = np.arange(1, self.n_neighbors+1)
+            knn_indices = np.hstack([knn_indices[:, 0].reshape(-1,1), knn_indices[:, sorted(idx)]])
+            knn_dists = np.float32(np.hstack([knn_dists[:, 0].reshape(-1,1), knn_dists[:, sorted(idx)]]))
 
         elif self.mode==1:
             # random
             idx = np.random.choice(np.arange(60), size=self.n_neighbors)
+            knn_indices = np.hstack([knn_indices[:, 0].reshape(-1,1), knn_indices[:, sorted(idx)]])
+            knn_dists = np.float32(np.hstack([knn_dists[:, 0].reshape(-1,1), knn_dists[:, sorted(idx)]]))
 
         elif self.mode==2:
             # furtherest 20
             idx = np.arange(60-self.n_neighbors, 60)
+            knn_indices = np.hstack([knn_indices[:, 0].reshape(-1,1), knn_indices[:, sorted(idx)]])
+            knn_dists = np.float32(np.hstack([knn_dists[:, 0].reshape(-1,1), knn_dists[:, sorted(idx)]]))
+
+        elif self.mode==3:
+            # policy
+            # indices = []
+            # dists = []
+            # for i in range(knn_dists.shape):
+            #     state = get_state(knn_dists[i])
+            #     action = self.policy(state)
+            #     mask = action.round().long()
+
+            #     indices.append(knn_indices[i] * mask)
+            #     dists.append(knn_dists[i] * mask)
+
+            # knn_indices = np.vstack(indices)
+            # knn_dists = np.vstack(dists)
+
+            dataset = torch.utils.data.TensorDataset(knn_indices)
+            dataloader = torch.utils.data.DataLoader(dataset, batch_size=1000)
+            actions = []
+            for data in dataloader:
+                states = get_states(data)
+                actions.append(self.policy(states))
+            actions = torch.vstack(actions)
+
+            _, indices = torch.topk(actions, self.n_neighbors, dim=1)
+            knn_indices = knn_indices.gather(1, indices)
+            knn_dists = knn_dists.gather(1, indices)
 
         else:
             pass
 
-        knn_indices = np.hstack([knn_indices[:, 0].reshape(-1,1), knn_indices[:, sorted(idx)]])
-        knn_dists = np.float32(np.hstack([knn_dists[:, 0].reshape(-1,1), knn_dists[:, sorted(idx)]]))
 
         # build fuzzy_simplicial_set
         umap_graph, sigmas, rhos = fuzzy_simplicial_set(
