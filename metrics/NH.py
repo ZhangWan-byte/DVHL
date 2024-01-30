@@ -30,7 +30,7 @@ def compute(df, k=5):
 
         score.append(len(n_class.intersection(n_new)) / k)
 
-    return np.mean(score)
+    return score, np.mean(score)
 
 # def compute(visu, labels):
 # 	K_scores = []
