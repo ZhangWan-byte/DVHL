@@ -78,11 +78,11 @@ class ConstructUMAPGraph:
         # get nearest neighbors
         nnd = NNDescent(
             X.reshape((len(X), np.product(np.shape(X)[1:]))),
-            n_neighbors=100,
+            n_neighbors=101,
             metric=self.metric,
             n_trees=n_trees,
             n_iters=n_iters,
-            max_candidates=20,
+            max_candidates=60,
             verbose=True
         )
         # get indices and distances
@@ -122,17 +122,19 @@ class ConstructUMAPGraph:
             # knn_indices = np.vstack(indices)
             # knn_dists = np.vstack(dists)
 
-            dataset = torch.utils.data.TensorDataset(knn_indices)
-            dataloader = torch.utils.data.DataLoader(dataset, batch_size=1000)
-            actions = []
-            for data in dataloader:
-                states = get_states(data)
-                actions.append(self.policy(states))
-            actions = torch.vstack(actions)
+            with torch.no_grad():
+                self.policy.eval()
+                dataset = torch.utils.data.TensorDataset(torch.from_numpy(knn_dists[:, :101]).cuda())
+                dataloader = torch.utils.data.DataLoader(dataset, batch_size=1000)
+                actions_li = []
+                for states in dataloader:
+                    # states = get_states(states)
+                    actions_li.append(self.policy(states[0]).detach().cpu())
+                actions = torch.vstack(actions_li)
 
-            _, indices = torch.topk(actions, self.n_neighbors, dim=1)
-            knn_indices = knn_indices.gather(1, indices)
-            knn_dists = knn_dists.gather(1, indices)
+                _, indices = torch.topk(actions, self.n_neighbors, dim=1)
+                knn_indices = torch.from_numpy(knn_indices).gather(1, indices).numpy()
+                knn_dists = torch.from_numpy(knn_dists).gather(1, indices).numpy()
 
         else:
             pass

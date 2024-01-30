@@ -87,10 +87,13 @@ class HumanDataset(Dataset):
         return self.X[idx], self.y[idx], self.feedback
 
 
-def get_dataset(args, data='MNIST', DR='UMAP'):
+def get_dataset(args, data='MNIST', DR='UMAP', policy=None):
 
-    if args.feedback_path != None:
-        feedback = torch.load(args.feedback_path)
+    if "feedback_path" in args.__dict__.keys():
+        if args.feedback_path != None:
+            feedback = torch.load(args.feedback_path)
+    else:
+        feedback = None
 
     # load data
     if data=='MNIST':
@@ -136,7 +139,9 @@ def get_dataset(args, data='MNIST', DR='UMAP'):
                 metric='euclidean', 
                 n_neighbors=args.n_neighbors, 
                 batch_size=args.batch_size_DR, 
-                random_state=42
+                random_state=42, 
+                mode=3, 
+                policy=policy
             )
             train_epochs_per_sample, train_head, train_tail, train_weight = train_graph_constructor(X_train)
             train_dataset = UMAPDataset(

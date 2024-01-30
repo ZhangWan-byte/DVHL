@@ -275,3 +275,105 @@ def train_epoch_DR(args, model, criterion, optimizer, scheduler, train_dataset, 
 
     return model, train_losses, eval_losses
 
+
+
+# epoch training for dimensinality reduction
+def train_epoch_DR_pure(args, model, criterion, optimizer, scheduler, train_dataset, test_dataset, epochs=20, device='cuda', result_path=None):
+    """train encoder
+
+    :param model: Encoder
+    :param criterion: loss function
+    :param epochs: number of training epochs, defaults to 20
+    :return: 
+    """
+
+    # recording variables
+    best_train_loss = 10.0
+    best_eval_loss = 10.0
+    best_epoch = 0
+
+    train_losses = []
+    eval_losses = []
+
+    if args.DR != 'UMAP':
+        train_loader = DataLoader(train_dataset, batch_size=args.batch_size_DR, shuffle=True)
+        test_loader = DataLoader(train_dataset, batch_size=args.batch_size_DR, shuffle=False)
+
+    for epoch in range(epochs):
+
+        # train
+        train_loss = []
+        
+        if args.DR == "UMAP":
+        
+            total_train = train_dataset.batches_per_epoch
+            total_test = test_dataset.batches_per_epoch
+
+            for batch_to, batch_from, batch_index_to, batch_index_from, y_to, y_from, feedback in tqdm(train_dataset.get_batches(), total=total_train):
+            
+                optimizer.zero_grad()
+
+                embedding_to = model(batch_to.cuda())
+                embedding_from = model(batch_from.cuda())
+
+                loss = criterion(embedding_to, embedding_from)
+            
+                loss.backward()
+            
+                optimizer.step()
+        
+                train_loss.append(loss.detach().cpu().item())
+
+        else:
+            print("wrong args.DR!")
+            exit()
+
+        if scheduler!=None:
+            scheduler.step()
+
+        train_losses.append(np.mean(train_loss))
+
+        # evaluate
+        with torch.no_grad():
+
+            model.eval()
+
+            eval_loss = []
+            preds_y = []
+            labels_y = []
+            
+            if args.DR == 'UMAP':
+            
+                for batch_to, batch_from, batch_index_to, batch_index_from, y_to, y_from, feedback in tqdm(test_dataset.get_batches(), total=total_test):
+                
+                    embedding_to  = model(batch_to.cuda())
+                    embedding_from  = model(batch_from.cuda())
+                
+                    loss_DR = criterion(embedding_to, embedding_from)
+                    eval_loss.append(loss_DR.detach().cpu().item())
+            
+            else:
+                print("wrong args.DR!")
+                exit()
+
+            eval_losses.append(np.mean(eval_loss))
+
+            print('DR train - epoch: {}, DR loss: {}'.format(
+                epoch, train_losses[-1]))
+            print('DR eval - epoch: {}, DR loss: {}'.format(
+                epoch, eval_losses[-1]))
+
+            # torch.save(model.MM_I.state_dict(), os.path.join(result_path, 'DR_weights_epoch{}.pt'.format(epoch)))
+
+            if eval_losses[-1] < best_eval_loss:
+                torch.save(model.state_dict(), os.path.join(result_path, 'DR_weights_best.pt'))
+                best_epoch = epoch
+                best_eval_loss = eval_losses[-1]
+                best_train_loss = train_losses[-1]
+
+        model.train()
+
+    print("best_epoch: {}, best_train_loss: {}, best_test_loss: {}".format(best_epoch, best_train_loss, best_eval_loss))
+
+    return model, train_losses, eval_losses
+
