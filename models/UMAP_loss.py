@@ -69,7 +69,7 @@ class ConstructUMAPGraph:
 
         return graph, epochs_per_sample, head, tail, weight, n_vertices
 
-    def __call__(self, X):
+    def __call__(self, X, y=None):
         # number of trees in random projection forest
         n_trees = 5 + int(round((X.shape[0]) ** 0.5 / 20.0))
         # max number of nearest neighbor iters to perform
@@ -124,7 +124,7 @@ class ConstructUMAPGraph:
 
             with torch.no_grad():
                 self.policy.eval()
-                dataset = torch.utils.data.TensorDataset(torch.from_numpy(knn_dists[:, :101]).cuda())
+                dataset = torch.utils.data.TensorDataset(X.cuda(), y.cuda())
                 dataloader = torch.utils.data.DataLoader(dataset, batch_size=1000)
                 actions_li = []
                 for states in dataloader:
