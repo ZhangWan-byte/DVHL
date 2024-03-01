@@ -13,6 +13,9 @@ import tyro
 from torch.distributions.categorical import Categorical
 from torch.utils.tensorboard import SummaryWriter
 
+from torch_geometric.nn import GCNConv, GATv2Conv, TopKPooling
+from torch.nn import MultiheadAttention
+
 
 @dataclass
 class Args:
@@ -34,25 +37,25 @@ class Args:
     """whether to capture videos of the agent performances (check out `videos` folder)"""
 
     # Algorithm specific arguments
-    env_id: str = "CartPole-v1"
+    env_id: str = "DVHL" # "CartPole-v1"
     """the id of the environment"""
     total_timesteps: int = 500000
     """total timesteps of the experiments"""
     learning_rate: float = 2.5e-4
     """the learning rate of the optimizer"""
-    num_envs: int = 4
+    num_envs: int = 1 # 4
     """the number of parallel game environments"""
-    num_steps: int = 128
+    num_steps: int = 10 # 128
     """the number of steps to run in each environment per policy rollout"""
-    anneal_lr: bool = True
+    anneal_lr: bool = False # True
     """Toggle learning rate annealing for policy and value networks"""
     gamma: float = 0.99
     """the discount factor gamma"""
     gae_lambda: float = 0.95
     """the lambda for the general advantage estimation"""
-    num_minibatches: int = 4
+    num_minibatches: int = 2 # 4
     """the number of mini-batches"""
-    update_epochs: int = 4
+    update_epochs: int = 10 # 4
     """the K epochs to update the policy"""
     norm_adv: bool = True
     """Toggles advantages normalization"""
@@ -97,23 +100,66 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
     return layer
 
 
+class GAT(torch.nn.Module):
+    def __init__(self, num_node_features=16, hidden=128, num_actions=12, std=1.0, device=torch.device('cpu')):
+        super().__init__()
+        self.hidden = hidden
+        self.num_actions = num_actions
+        self.device = device
+        
+        self.conv1 = GATv2Conv(num_node_features, hidden, edge_dim=1)
+        self.conv2 = GATv2Conv(hidden, hidden, edge_dim=1)
+        
+        # self.pooling = TopKPooling(in_channels=hidden)
+        self.pooling = MultiheadAttention(embed_dim=hidden, num_heads=2)
+        
+        self.mlp = nn.Sequential(
+            layer_init(nn.Linear(in_features=hidden, out_features=hidden)),
+            nn.LeakyReLU(),
+            layer_init(nn.Linear(in_features=hidden, out_features=hidden)),
+            nn.LeakyReLU(),
+            layer_init(nn.Linear(in_features=hidden, out_features=self.num_actions), std=std)
+        )
+
+    def forward(self, x, edge_index, edge_attr):
+
+        n, f = x.shape[0], self.hidden
+
+        # Conv layers
+        x = self.conv1(x, edge_index, edge_attr)
+        x = F.relu(x)
+        x = F.dropout(x, training=self.training)
+        x = self.conv2(x, edge_index, edge_attr)
+
+        # Readout layer
+        x, _ = self.pooling(x, x, x)
+        x = x.sum(dim=0)
+        x = self.mlp(x)
+
+        return x
+
+
+
 class Agent(nn.Module):
     def __init__(self, envs):
         super().__init__()
-        self.critic = nn.Sequential(
-            layer_init(nn.Linear(np.array(envs.single_observation_space.shape).prod(), 64)),
-            nn.Tanh(),
-            layer_init(nn.Linear(64, 64)),
-            nn.Tanh(),
-            layer_init(nn.Linear(64, 1), std=1.0),
-        )
-        self.actor = nn.Sequential(
-            layer_init(nn.Linear(np.array(envs.single_observation_space.shape).prod(), 64)),
-            nn.Tanh(),
-            layer_init(nn.Linear(64, 64)),
-            nn.Tanh(),
-            layer_init(nn.Linear(64, envs.single_action_space.n), std=0.01),
-        )
+        # self.critic = nn.Sequential(
+        #     layer_init(nn.Linear(np.array(envs.single_observation_space.shape).prod(), 64)),
+        #     nn.Tanh(),
+        #     layer_init(nn.Linear(64, 64)),
+        #     nn.Tanh(),
+        #     layer_init(nn.Linear(64, 1), std=1.0),
+        # )
+        # self.actor = nn.Sequential(
+        #     layer_init(nn.Linear(np.array(envs.single_observation_space.shape).prod(), 64)),
+        #     nn.Tanh(),
+        #     layer_init(nn.Linear(64, 64)),
+        #     nn.Tanh(),
+        #     layer_init(nn.Linear(64, envs.single_action_space.n), std=0.01),
+        # )
+
+        self.critic = GAT(num_node_features=16, hidden=128, num_actions=1, std=1.0)
+        self.actor = GAT(num_node_features=16, hidden=128, num_actions=12, std=0.01)
 
     def get_value(self, x):
         return self.critic(x)
@@ -131,7 +177,7 @@ if __name__ == "__main__":
     args.batch_size = int(args.num_envs * args.num_steps)
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
     args.num_iterations = args.total_timesteps // args.batch_size
-    run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
+    run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{time.strftime('%m%d%H%M%S', time.localtime())}"
     if args.track:
         import wandb
 
