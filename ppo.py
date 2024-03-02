@@ -16,6 +16,10 @@ from torch.utils.tensorboard import SummaryWriter
 from torch_geometric.nn import GCNConv, GATv2Conv, TopKPooling
 from torch.nn import MultiheadAttention
 
+from annoy import AnnoyIndex
+from myPaCMAP import distance_to_option
+from ppo import DREnv
+
 
 @dataclass
 class Args:
@@ -100,6 +104,34 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
     return layer
 
 
+def get_scaledKNN(X, _RANDOM_STATE=None):
+    n, dim = X.shape
+    # sample more neighbors than needed
+    n_neighbors_extra = min(n_neighbors + 50, n - 1)
+    tree = AnnoyIndex(dim, metric=distance)
+    if _RANDOM_STATE is not None:
+        tree.set_seed(_RANDOM_STATE)
+    for i in range(n):
+        tree.add_item(i, X[i, :])
+    tree.build(20)
+
+    option = distance_to_option(distance=distance)
+
+    nbrs = np.zeros((n, n_neighbors_extra), dtype=np.int32)
+    knn_distances = np.empty((n, n_neighbors_extra), dtype=np.float32)
+
+    for i in range(n):
+        nbrs_ = tree.get_nns_by_item(i, n_neighbors_extra + 1)
+        nbrs[i, :] = nbrs_[1:]
+        for j in range(n_neighbors_extra):
+            knn_distances[i, j] = tree.get_distance(i, nbrs[i, j])
+    print_verbose("Found nearest neighbor", verbose)
+    sig = np.maximum(np.mean(knn_distances[:, 3:6], axis=1), 1e-10)
+    print_verbose("Calculated sigma", verbose)
+    scaled_dist = scale_dist(knn_distances, sig, nbrs)
+
+    return scaled_dist
+
 class GAT(torch.nn.Module):
     def __init__(self, num_node_features=16, hidden=128, num_actions=12, std=1.0, device=torch.device('cpu')):
         super().__init__()
@@ -107,8 +139,8 @@ class GAT(torch.nn.Module):
         self.num_actions = num_actions
         self.device = device
         
-        self.conv1 = GATv2Conv(num_node_features, hidden, edge_dim=1)
-        self.conv2 = GATv2Conv(hidden, hidden, edge_dim=1)
+        self.conv1 = GATv2Conv(num_node_features, hidden, edge_dim=2)
+        self.conv2 = GATv2Conv(hidden, hidden, edge_dim=2)
         
         # self.pooling = TopKPooling(in_channels=hidden)
         self.pooling = MultiheadAttention(embed_dim=hidden, num_heads=2)
@@ -205,21 +237,29 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
     # env setup
-    envs = gym.vector.SyncVectorEnv(
-        [make_env(args.env_id, i, args.capture_video, run_name) for i in range(args.num_envs)],
-    )
-    assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
+    # envs = gym.vector.SyncVectorEnv(
+    #     [make_env(args.env_id, i, args.capture_video, run_name) for i in range(args.num_envs)],
+    # )
+    # assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
+    envs = DREnv()
 
     agent = Agent(envs).to(device)
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
     # ALGO Logic: Storage setup
-    obs = torch.zeros((args.num_steps, args.num_envs) + envs.single_observation_space.shape).to(device)
-    actions = torch.zeros((args.num_steps, args.num_envs) + envs.single_action_space.shape).to(device)
-    logprobs = torch.zeros((args.num_steps, args.num_envs)).to(device)
-    rewards = torch.zeros((args.num_steps, args.num_envs)).to(device)
-    dones = torch.zeros((args.num_steps, args.num_envs)).to(device)
-    values = torch.zeros((args.num_steps, args.num_envs)).to(device)
+    # obs = torch.zeros((args.num_steps, args.num_envs) + envs.single_observation_space.shape).to(device)
+    # actions = torch.zeros((args.num_steps, args.num_envs) + envs.single_action_space.shape).to(device)
+    # logprobs = torch.zeros((args.num_steps, args.num_envs)).to(device)
+    # rewards = torch.zeros((args.num_steps, args.num_envs)).to(device)
+    # dones = torch.zeros((args.num_steps, args.num_envs)).to(device)
+    # values = torch.zeros((args.num_steps, args.num_envs)).to(device)
+
+    obs = []
+    actions = []
+    logprobs = []
+    rewards = []
+    dones = []
+    values = []
 
     # TRY NOT TO MODIFY: start the game
     global_step = 0

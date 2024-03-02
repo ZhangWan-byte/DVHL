@@ -133,11 +133,25 @@ def sample_neighbors_pair_basis(n_basis, X, scaled_dist, nbrs, n_neighbors):
     return pair_neighbors
 
 
-@numba.njit("i4[:,:](f4[:,:],i4,i4)", nogil=True, cache=True)
-def sample_MN_pair(X, n_MN, option=0):
+@numba.njit("i4[:,:](f4[:,:],i4,i4,i4)", nogil=True, cache=True)
+def sample_MN_pair(X, n_MN, option=0, mode=0):
     '''Sample Mid Near pairs.'''
     n = X.shape[0]
     pair_MN = np.empty((n*n_MN, 2), dtype=np.int32)
+    
+    if mode==0:
+        # get second nearest out of six
+        num_delete = 1
+    elif mode==1:
+        # get third nearest out of six
+        num_delete = 2
+    elif mode==3:
+        # get fourth nearest out of six
+        num_delete = 3
+    else:
+        # default as second nearest
+        num_delete = 1
+    
     for i in numba.prange(n):
         for jj in range(n_MN):
             sampled = np.random.randint(0, n, 6)
@@ -145,17 +159,21 @@ def sample_MN_pair(X, n_MN, option=0):
             for t in range(sampled.shape[0]):
                 dist_list[t] = calculate_dist(
                     X[i], X[sampled[t]], distance_index=option)
-            min_dic = np.argmin(dist_list)
-            dist_list = np.delete(dist_list, [min_dic])
-            sampled = np.delete(sampled, [min_dic])
+            # min_dic = np.argmin(dist_list)
+            # dist_list = np.delete(dist_list, [min_dic])
+            # sampled = np.delete(sampled, [min_dic])
+            min_dic = np.argsort(dist_list)[:num_delete]
+            dist_list = np.delete(dist_list, min_dic)
+            sampled = np.delete(sampled, min_dic)
+            
             picked = sampled[np.argmin(dist_list)]
             pair_MN[i*n_MN + jj][0] = i
             pair_MN[i*n_MN + jj][1] = picked
     return pair_MN
 
 
-@numba.njit("i4[:,:](f4[:,:],i4,i4,i4)", nogil=True, cache=True)
-def sample_MN_pair_deterministic(X, n_MN, random_state, option=0):
+@numba.njit("i4[:,:](f4[:,:],i4,i4,i4,i4)", nogil=True, cache=True)
+def sample_MN_pair_deterministic(X, n_MN, random_state, option=0, mode=0):
     '''Sample Mid Near pairs using the given random state.'''
     n = X.shape[0]
     pair_MN = np.empty((n*n_MN, 2), dtype=np.int32)
@@ -177,8 +195,8 @@ def sample_MN_pair_deterministic(X, n_MN, random_state, option=0):
     return pair_MN
 
 
-@numba.njit("i4[:,:](f4[:,:],i4[:,:],i4,i4)", parallel=True, nogil=True, cache=True)
-def sample_FP_pair(X, pair_neighbors, n_neighbors, n_FP):
+@numba.njit("i4[:,:](f4[:,:],i4[:,:],i4,i4,i4)", parallel=True, nogil=True, cache=True)
+def sample_FP_pair(X, pair_neighbors, n_neighbors, n_FP, mode=0):
     '''Sample Further pairs.'''
     n = X.shape[0]
     pair_FP = np.empty((n * n_FP, 2), dtype=np.int32)
@@ -191,8 +209,8 @@ def sample_FP_pair(X, pair_neighbors, n_neighbors, n_FP):
     return pair_FP
 
 
-@numba.njit("i4[:,:](f4[:,:],i4[:,:],i4,i4,i4)", parallel=True, nogil=True, cache=True)
-def sample_FP_pair_deterministic(X, pair_neighbors, n_neighbors, n_FP, random_state):
+@numba.njit("i4[:,:](f4[:,:],i4[:,:],i4,i4,i4,i4)", parallel=True, nogil=True, cache=True)
+def sample_FP_pair_deterministic(X, pair_neighbors, n_neighbors, n_FP, random_state, mode=0):
     '''Sample Further pairs using the given random state.'''
     n = X.shape[0]
     pair_FP = np.empty((n * n_FP, 2), dtype=np.int32)
@@ -449,7 +467,8 @@ def generate_pair(
         n_MN,
         n_FP,
         distance='euclidean',
-        verbose=True
+        verbose=True,
+        mode=0
 ):
     '''Generate pairs for the dataset.
     '''
@@ -480,12 +499,12 @@ def generate_pair(
     print_verbose("Found scaled dist", verbose)
     pair_neighbors = sample_neighbors_pair(X, scaled_dist, nbrs, n_neighbors)
     if _RANDOM_STATE is None:
-        pair_MN = sample_MN_pair(X, n_MN, option)
-        pair_FP = sample_FP_pair(X, pair_neighbors, n_neighbors, n_FP)
+        pair_MN = sample_MN_pair(X, n_MN, option, mode)
+        pair_FP = sample_FP_pair(X, pair_neighbors, n_neighbors, n_FP, mode)
     else:
-        pair_MN = sample_MN_pair_deterministic(X, n_MN, _RANDOM_STATE, option)
+        pair_MN = sample_MN_pair_deterministic(X, n_MN, _RANDOM_STATE, option, mode)
         pair_FP = sample_FP_pair_deterministic(
-            X, pair_neighbors, n_neighbors, n_FP, _RANDOM_STATE)
+            X, pair_neighbors, n_neighbors, n_FP, _RANDOM_STATE, mode)
     return pair_neighbors, pair_MN, pair_FP, tree
 
 
@@ -496,7 +515,8 @@ def generate_pair_no_neighbors(
         n_FP,
         pair_neighbors,
         distance='euclidean',
-        verbose=True
+        verbose=True, 
+        mode=0
 ):
     '''Generate mid-near pairs and further pairs for a given dataset.
     This function is useful when the nearest neighbors comes from a given set.
@@ -504,12 +524,12 @@ def generate_pair_no_neighbors(
     option = distance_to_option(distance=distance)
 
     if _RANDOM_STATE is None:
-        pair_MN = sample_MN_pair(X, n_MN, option)
-        pair_FP = sample_FP_pair(X, pair_neighbors, n_neighbors, n_FP)
+        pair_MN = sample_MN_pair(X, n_MN, option, mode)
+        pair_FP = sample_FP_pair(X, pair_neighbors, n_neighbors, n_FP, mode)
     else:
-        pair_MN = sample_MN_pair_deterministic(X, n_MN, _RANDOM_STATE, option)
+        pair_MN = sample_MN_pair_deterministic(X, n_MN, _RANDOM_STATE, option, mode)
         pair_FP = sample_FP_pair_deterministic(
-            X, pair_neighbors, n_neighbors, n_FP, _RANDOM_STATE)
+            X, pair_neighbors, n_neighbors, n_FP, _RANDOM_STATE, mode)
     return pair_neighbors, pair_MN, pair_FP
 
 
