@@ -133,7 +133,7 @@ def get_scaledKNN(X, _RANDOM_STATE=None):
     return scaled_dist
 
 class GAT(torch.nn.Module):
-    def __init__(self, num_node_features=16, hidden=128, num_actions=12, std=1.0, device=torch.device('cpu')):
+    def __init__(self, num_node_features=50, hidden=32, num_actions=81, std=1.0, device=torch.device('cpu')):
         super().__init__()
         self.hidden = hidden
         self.num_actions = num_actions
@@ -142,18 +142,28 @@ class GAT(torch.nn.Module):
         self.conv1 = GATv2Conv(num_node_features, hidden, edge_dim=2)
         self.conv2 = GATv2Conv(hidden, hidden, edge_dim=2)
         
-        # self.pooling = TopKPooling(in_channels=hidden)
-        self.pooling = MultiheadAttention(embed_dim=hidden, num_heads=2)
-        
+        # graph feature
+        self.pooling = MultiheadAttention(embed_dim=hidden, num_heads=2)        
         self.mlp = nn.Sequential(
             layer_init(nn.Linear(in_features=hidden, out_features=hidden)),
             nn.LeakyReLU(),
             layer_init(nn.Linear(in_features=hidden, out_features=hidden)),
+            nn.LeakyReLU()
+        )
+
+        # history feature
+        self.gru = nn.GRU(input_size=num_actions, hidden_size=hidden, num_layers=1)
+
+        # prediction head
+        self.head = nn.Sequantial(
+            layer_init(nn.Linear(in_features=hidden*2, out_features=hidden)), 
             nn.LeakyReLU(),
             layer_init(nn.Linear(in_features=hidden, out_features=self.num_actions), std=std)
         )
 
-    def forward(self, x, edge_index, edge_attr):
+    def forward(self, state):
+
+        x, edge_index, edge_attr, history = state["x"], state["edge_index"], state["edge_attr"], state["history"]
 
         n, f = x.shape[0], self.hidden
 
@@ -166,14 +176,21 @@ class GAT(torch.nn.Module):
         # Readout layer
         x, _ = self.pooling(x, x, x)
         x = x.sum(dim=0)
-        x = self.mlp(x)
+        x = self.mlp(x).view(1,-1)
 
-        return x
+        # History features
+        hist = gru(history).view(1, -1)
+
+        # Prediction head
+        out = torch.cat([x, hist], dim=1)
+        out = self.head(out)
+
+        return out
 
 
 
 class Agent(nn.Module):
-    def __init__(self, envs):
+    def __init__(self, envs, num_node_features=50, hidden=64, num_actions=81):
         super().__init__()
         # self.critic = nn.Sequential(
         #     layer_init(nn.Linear(np.array(envs.single_observation_space.shape).prod(), 64)),
@@ -190,18 +207,24 @@ class Agent(nn.Module):
         #     layer_init(nn.Linear(64, envs.single_action_space.n), std=0.01),
         # )
 
-        self.critic = GAT(num_node_features=16, hidden=128, num_actions=1, std=1.0)
-        self.actor = GAT(num_node_features=16, hidden=128, num_actions=12, std=0.01)
+        self.critic = GAT(num_node_features, hidden, num_actions=1, std=1.0)
+        self.actor = GAT(num_node_features, hidden, num_actions=num_actions, std=0.01)
 
-    def get_value(self, x):
-        return self.critic(x)
+    def get_value(self, state):
+        for key, value in state.items():
+            state[key] = state[key].to(self.device)
 
-    def get_action_and_value(self, x, action=None):
-        logits = self.actor(x)
+        return self.critic(state)
+
+    def get_action_and_value(self, state, action=None):
+        for key, value in state.items():
+            state[key] = state[key].to(self.device)
+
+        logits = self.actor(state)
         probs = Categorical(logits=logits)
         if action is None:
             action = probs.sample()
-        return action, probs.log_prob(action), probs.entropy(), self.critic(x)
+        return action, probs.log_prob(action), probs.entropy(), self.critic(state)
 
 
 if __name__ == "__main__":
