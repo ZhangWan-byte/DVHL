@@ -11,7 +11,7 @@ class DREnv(Env):
         self.label = label
         self.batch_size = batch_size
         self.trajectory = trajectory
-        self.best = None
+        self.best_reward = float('-inf')
 
         self.count = 0
         self.current_state = None
@@ -26,6 +26,7 @@ class DREnv(Env):
         self.history = F.one_hot(
             torch.tensor(self.history_actions + self.effect_history_actions), num_classes=self.action_space
         ).float()
+
 
     def obtain_state(self, x, label=None, batch_size=1000, n_neighbors=None, MN_ratio=0.5, FP_ratio=2.0, initial=False):
         """generate graph -- from params to state (graph)
@@ -105,7 +106,8 @@ class DREnv(Env):
 
         return state
 
-    def get_new_state(self, action):
+
+    def transition(self, action):
         
         alpha_values = [0.8, 1.0, 1.2]                # value range of ratio of kNN
         beta_values = [0.8, 1.0, 1.2]                 # value range of ratio of mid-pairs
@@ -123,6 +125,7 @@ class DREnv(Env):
         state = self.obtain_state(self.x, self.label, batch_size, n_neighbors, MN_ratio, FP_ratio, initial=False)
 
         return state
+
 
     def obtain_reward(self, state):
         with torch.no_grad():
@@ -152,7 +155,16 @@ class DREnv(Env):
                     reward = np.load(os.path.join(self.save_path, "{}.npy".format(name)))
                     break
 
-            return reward
+            # r1: compared to last reward
+            if reward > self.history_rewards[-1]:
+                r1 = 1
+            else:
+                r1 = 0
+
+            # r2: compared to best reward
+            r2 = r2 - self.best_reward
+
+            return r1 + r2
         
     def step(self, action):
         self.count = self.count + 1
@@ -171,7 +183,7 @@ class DREnv(Env):
         # else:
         #     raise Exception("Invalid action")
 
-        new_state = self.get_new_state(action)
+        new_state = self.transition(action)
         self.current_state = new_state
 
         # if self.current_state[1] == self.goal[1] and self.current_state[0] == self.goal[0]:
@@ -183,8 +195,17 @@ class DREnv(Env):
         # if self.count > 200:
         #     done = True
 
+        # obtain reward
         reward = self.obtain_reward(self.current_state)
+        
+        # update best reward
+        if reward > self.best_reward:
+            self.best_reward = reward
+
+        # update history rewards
         self.history_rewards.append(reward)
+
+        # add history info to state
         if reward > self.history_rewards[0]:
             self.effect_history_actions = [1]
         else:
@@ -193,6 +214,8 @@ class DREnv(Env):
         self.history = F.one_hot(
             torch.tensor(self.history_actions + self.effect_history_actions), num_classes=self.action_space
         ).float()
+        self.current_state.append(self.history)
+
 
         info = {}
         done = False if self.count>10 else True
