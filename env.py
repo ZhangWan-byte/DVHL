@@ -6,9 +6,11 @@ from copy import deepcopy
 
 
 class DREnv(Env):
-    def __init__(self, x, label, action_space=12, history_len=3):
+    def __init__(self, x, label, trajectory, batch_size=1000, action_space=12, history_len=3):
         self.x = x
         self.label = label
+        self.batch_size = batch_size
+        self.trajectory = trajectory
         self.best = None
 
         self.count = 0
@@ -25,44 +27,46 @@ class DREnv(Env):
             torch.tensor(self.history_actions + self.effect_history_actions), num_classes=self.action_space
         ).float()
 
-    def obtain_state(x, label=None, batch_size=1000, n_neighbors=None, MN_ratio=0.5, FP_ratio=2.0, initial=False):
+    def obtain_state(self, x, label=None, batch_size=1000, n_neighbors=None, MN_ratio=0.5, FP_ratio=2.0, initial=False):
         """generate graph -- from params to state (graph)
 
-        :param x: total data
+        :param x: total data, type numpy.float32
         :param n_neighbors: kNN, defaults to 10
         :param MN_ratio: mid-pairs, defaults to 0.5
         :param FP_ratio: negatives, defaults to 2.0
         """
-
+        print(x.shape)
         if initial==True:
 
             n_neighbors = None
             MN_ratio = 0.5
             FP_ratio = 2.0
 
-        # random sample batch if x is larger than batch_size
-        if x.shape[0] > batch_size:
-            idx = torch.randperm(x.shape[0])[:batch_size]
-            x = x[idx]
-            if label!=None:
-                label = label[idx]
+        # # random sample batch if x is larger than batch_size
+        # if x.shape[0] > batch_size:
+        #     idx = torch.randperm(x.shape[0])[:batch_size]
+        #     x = x[idx]
+        #     if label is not None:
+        #         label = label[idx]
+
+        num_nodes = x.shape[0]
 
         # assign number of neighors / mid-pairs / negatives
         if n_neighbors==None:
             if x.shape[0] <= 10000:
                 n_neighbors = 10
             else:
-                n_neighbors = int(round(10 + 15 * (np.log10(n) - 4)))
+                n_neighbors = int(round(10 + 15 * (np.log10(num_nodes) - 4)))
         n_MN = int(round(n_neighbors * MN_ratio))
         n_FP = int(round(n_neighbors * FP_ratio))
 
         # generate kNN neighbors, mid-pairs, negatives
         pair_neighbors, pair_MN, pair_FP, tree = generate_pair(
-            x.numpy(), n_neighbors, n_MN, n_FP, distance='euclidean', verbose=False
+            x, n_neighbors, n_MN, n_FP, distance='euclidean', verbose=False
         )
 
         # add virtual node
-        x = np.vstack([x, np.mean(x.numpy(), axis=0)])
+        x = np.vstack([x, np.mean(x, axis=0)])
         
         # edge index
         pair_VN = np.array([(i, num_nodes) for i in range(num_nodes)] + [(num_nodes, i) for i in range(num_nodes)])
@@ -120,8 +124,35 @@ class DREnv(Env):
 
         return state
 
-    def obtain_reward(state):
-        pass
+    def obtain_reward(self, state):
+        with torch.no_grad():
+
+            self.reducer = myPaCMAP(
+                n_components=2, 
+                n_neighbors=state["n_neighbors"], 
+                MN_ratio=state["MN_ratio"], 
+                FP_ratio=state["FP_ratio"], 
+                pair_neighbors=state["pair_neighbors"], 
+                pair_MN=state["pair_MN"], 
+                pair_FP=state["pair_FP"]
+            )
+
+            z = self.reducer.fit_transform(self.x)
+            name = "{}_{}".format(self.trajectory, self.count)
+            draw_z(
+                z=normalise(z), 
+                cls=self.label, 
+                s=1, 
+                save_path=os.path.join(self.save_path, name), 
+                display=True, 
+                title=self.count
+            )
+            while True:
+                if "{}.npy".format(name) in os.listdir(self.save_path):
+                    reward = np.load(os.path.join(self.save_path, "{}.npy".format(name)))
+                    break
+
+            return reward
         
     def step(self, action):
         self.count = self.count + 1
@@ -172,5 +203,5 @@ class DREnv(Env):
 
     def reset(self):
         self.count = 0
-        self.current_state = self.obtain_state(initial=True) # self.start
+        self.current_state = self.obtain_state(self.x, self.label, self.batch_size, initial=True) # self.start
         return self.current_state
