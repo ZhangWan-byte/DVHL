@@ -91,7 +91,12 @@ class DREnv(Env):
 
             "n_neighbors": n_neighbors, 
             "MN_ratio": MN_ratio, 
-            "FP_ratio": FP_ratio
+            "FP_ratio": FP_ratio, 
+
+            "pair_neighbors": pair_neighbors,
+            "pair_MN": pair_MN, 
+            "pair_FP": pair_FP,
+            "tree": tree
         }
 
         return state
