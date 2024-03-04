@@ -19,9 +19,10 @@ class DREnv(Env):
         # effect_history_actions: +1 / 0 / -1
         self.history_len = history_len
         self.history_actions = [0] * history_len
+        self.history_rewards = [0] * history_len
         self.effect_history_actions = [0]
         self.history = F.one_hot(
-            torch.tensor(history_actions + effect_history_actions), num_classes=self.action_space
+            torch.tensor(self.history_actions + self.effect_history_actions), num_classes=self.action_space
         ).float()
 
     def obtain_state(x, label=None, batch_size=1000, n_neighbors=None, MN_ratio=0.5, FP_ratio=2.0, initial=False):
@@ -86,7 +87,7 @@ class DREnv(Env):
 
             # "history_actions": self.history_actions, 
             # "effect_history_actions": self.effect_history_actions, 
-            "history": self.history, 
+            # "history": self.history, 
 
             "n_neighbors": n_neighbors, 
             "MN_ratio": MN_ratio, 
@@ -147,6 +148,15 @@ class DREnv(Env):
         #     done = True
 
         reward = self.obtain_reward(self.current_state)
+        self.history_rewards.append(reward)
+        if reward > self.history_rewards[0]:
+            self.effect_history_actions = [1]
+        else:
+            self.effect_history_actions = [-1]
+
+        self.history = F.one_hot(
+            torch.tensor(self.history_actions + self.effect_history_actions), num_classes=self.action_space
+        ).float()
 
         info = {}
         done = False if self.count>10 else True
