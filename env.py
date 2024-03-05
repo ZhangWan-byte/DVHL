@@ -6,16 +6,17 @@ from copy import deepcopy
 
 
 class DREnv(Env):
-    def __init__(self, x, label, trajectory, batch_size=1000, action_space=12, history_len=3):
+    def __init__(self, x, label, batch_size=1000, action_space=12, history_len=3, save_path=None):
         self.x = x
         self.label = label
         self.batch_size = batch_size
-        self.trajectory = trajectory
         self.best_reward = float('-inf')
 
         self.count = 0
         self.current_state = None
         self.action_space = action_space
+
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
         # history_actions: +1 / 0 / -1
         # effect_history_actions: +1 / 0 / -1
@@ -25,8 +26,9 @@ class DREnv(Env):
         self.effect_history_actions = [0]
         self.history = F.one_hot(
             torch.tensor(self.history_actions + self.effect_history_actions), num_classes=self.action_space
-        ).float()
+        ).float().to(self.device)
 
+        self.save_path = save_path
 
     def obtain_state(self, x, label=None, batch_size=1000, n_neighbors=None, MN_ratio=0.5, FP_ratio=2.0, initial=False):
         """generate graph -- from params to state (graph)
@@ -85,14 +87,14 @@ class DREnv(Env):
 
         # generate state
         state = {
-            "x": torch.from_numpy(x), 
-            "label": torch.from_numpy(label), 
-            "edge_index": torch.from_numpy(edge_index).long(), 
-            "edge_attr": torch.from_numpy(edge_attr), 
+            "x": torch.from_numpy(x).to(self.device), 
+            "label": torch.from_numpy(label).to(self.device), 
+            "edge_index": torch.from_numpy(edge_index).long().to(self.device), 
+            "edge_attr": torch.from_numpy(edge_attr).to(self.device), 
 
             # "history_actions": self.history_actions, 
             # "effect_history_actions": self.effect_history_actions, 
-            # "history": self.history, 
+            "history": self.history.to(self.device), 
 
             "n_neighbors": n_neighbors, 
             "MN_ratio": MN_ratio, 
@@ -100,8 +102,7 @@ class DREnv(Env):
 
             "pair_neighbors": pair_neighbors,
             "pair_MN": pair_MN, 
-            "pair_FP": pair_FP,
-            "tree": tree
+            "pair_FP": pair_FP
         }
 
         return state
@@ -109,6 +110,7 @@ class DREnv(Env):
 
     def transition(self, action):
         
+        # 1. get action
         alpha_values = [0.8, 1.0, 1.2]                # value range of ratio of kNN
         beta_values = [0.8, 1.0, 1.2]                 # value range of ratio of mid-pairs
         gamma_values = [0.8, 1.0, 1.2]                # value range of ratio of negatives
@@ -122,6 +124,33 @@ class DREnv(Env):
         MN_ratio = beta * self.current_state["MN_ratio"]
         FP_ratio = gamma * self.current_state["FP_ratio"]
 
+        # 2. obtain reward
+        reward = self.obtain_reward(self.current_state)
+        
+        # update best reward
+        if reward > self.best_reward:
+            self.best_reward = reward
+
+        # 3. obtain history
+        # update history actions
+        self.history_actions.append(action)
+        self.history_actions = self.history_actions[1:]
+
+        # update history rewards
+        self.history_rewards.append(reward)
+        self.history_rewards = self.history_rewards[1:]
+
+        # add history info to state
+        if reward > self.history_rewards[0]:
+            self.effect_history_actions = [1]
+        else:
+            self.effect_history_actions = [-1]
+
+        self.history = F.one_hot(
+            torch.tensor(self.history_actions + self.effect_history_actions), num_classes=self.action_space
+        ).float().to(self.device)
+
+        # 4. obtain state
         state = self.obtain_state(self.x, self.label, batch_size, n_neighbors, MN_ratio, FP_ratio, initial=False)
 
         return state
@@ -141,14 +170,14 @@ class DREnv(Env):
             )
 
             z = self.reducer.fit_transform(self.x)
-            name = "{}_{}".format(self.trajectory, self.count)
+            name = "{}_{}".format(self.iteration, self.step)
             draw_z(
                 z=normalise(z), 
                 cls=self.label, 
                 s=1, 
                 save_path=os.path.join(self.save_path, name), 
                 display=True, 
-                title=self.count
+                title=self.step
             )
             while True:
                 if "{}.npy".format(name) in os.listdir(self.save_path):
@@ -166,9 +195,15 @@ class DREnv(Env):
 
             return r1 + r2
         
-    def step(self, action):
+    def step(self, action, iteration, step):
         self.count = self.count + 1
+        self.iteration = iteration
+        self.step = step
+
         self.history_actions.append(action)
+        if np.count_nonzero(self.history_actions)>=self.history_len:
+            self.history_actions = self.history_actions[1:]
+            self.history_rewards = self.history_rewards[1:]
 
         # new_state = deepcopy(self.current_state)
 
@@ -195,36 +230,18 @@ class DREnv(Env):
         # if self.count > 200:
         #     done = True
 
-        # obtain reward
-        reward = self.obtain_reward(self.current_state)
-        
-        # update best reward
-        if reward > self.best_reward:
-            self.best_reward = reward
-
-        # update history rewards
-        self.history_rewards.append(reward)
-
-        # add history info to state
-        if reward > self.history_rewards[0]:
-            self.effect_history_actions = [1]
-        else:
-            self.effect_history_actions = [-1]
-
-        self.history = F.one_hot(
-            torch.tensor(self.history_actions + self.effect_history_actions), num_classes=self.action_space
-        ).float()
-        self.current_state.append(self.history)
-
-
         info = {}
-        done = False if self.count>10 else True
-        return self.current_state, reward, done, info
+        terminations = False # accident or illegal situation
+        done = False if self.count<10 else True
+        return self.current_state, reward, terminations, done, info
 
     def render(self):
         pass
 
     def reset(self):
         self.count = 0
+        self.iteration = 1
+        self.step = 0
+
         self.current_state = self.obtain_state(self.x, self.label, self.batch_size, initial=True) # self.start
         return self.current_state

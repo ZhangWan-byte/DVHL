@@ -43,7 +43,7 @@ class Args:
     # Algorithm specific arguments
     env_id: str = "DVHL" # "CartPole-v1"
     """the id of the environment"""
-    total_timesteps: int = 500000
+    total_timesteps: int = 100 # 500000
     """total timesteps of the experiments"""
     learning_rate: float = 2.5e-4
     """the learning rate of the optimizer"""
@@ -229,9 +229,9 @@ class Agent(nn.Module):
 
 if __name__ == "__main__":
     args = tyro.cli(Args)
-    args.batch_size = int(args.num_envs * args.num_steps)
-    args.minibatch_size = int(args.batch_size // args.num_minibatches)
-    args.num_iterations = args.total_timesteps // args.batch_size
+    args.batch_size = int(args.num_envs * args.num_steps)                   # 10
+    args.minibatch_size = int(args.batch_size // args.num_minibatches)      # 5
+    args.num_iterations = args.total_timesteps // args.batch_size           # 10
     run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{time.strftime('%m%d%H%M%S', time.localtime())}"
     if args.track:
         import wandb
@@ -264,7 +264,15 @@ if __name__ == "__main__":
     #     [make_env(args.env_id, i, args.capture_video, run_name) for i in range(args.num_envs)],
     # )
     # assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
-    envs = DREnv()
+    
+    data, labels = gauss_clusters(
+        n_clusters=20,
+        dim=50,
+        pts_cluster=1000,
+        stepsize=6,
+        random_state=args.seed,
+    )
+    envs = DREnv(data, label, batch_size=1000, action_space=81, history_len=3, save_path=f"runs/{run_name}")
 
     agent = Agent(envs).to(device)
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
@@ -277,18 +285,25 @@ if __name__ == "__main__":
     # dones = torch.zeros((args.num_steps, args.num_envs)).to(device)
     # values = torch.zeros((args.num_steps, args.num_envs)).to(device)
 
-    obs = []
-    actions = []
-    logprobs = []
-    rewards = []
-    dones = []
-    values = []
+    # obs = []
+    # actions = []
+    # logprobs = []
+    # rewards = []
+    # dones = []
+    # values = []
+
+    obs = torch.zeros((args.num_steps, args.num_envs, 1)).to(device)
+    actions = torch.zeros((args.num_steps, args.num_envs, envs.action_space)).to(device)
+    logprobs = torch.zeros((args.num_steps, args.num_envs)).to(device)
+    rewards = torch.zeros((args.num_steps, args.num_envs)).to(device)
+    dones = torch.zeros((args.num_steps, args.num_envs)).to(device)
+    values = torch.zeros((args.num_steps, args.num_envs)).to(device)
 
     # TRY NOT TO MODIFY: start the game
     global_step = 0
     start_time = time.time()
     next_obs, _ = envs.reset(seed=args.seed)
-    next_obs = torch.Tensor(next_obs).to(device)
+    # next_obs = torch.Tensor(next_obs).to(device)
     next_done = torch.zeros(args.num_envs).to(device)
 
     for iteration in range(1, args.num_iterations + 1):
@@ -311,10 +326,11 @@ if __name__ == "__main__":
             logprobs[step] = logprob
 
             # TRY NOT TO MODIFY: execute the game and log data.
-            next_obs, reward, terminations, truncations, infos = envs.step(action.cpu().numpy())
+            next_obs, reward, terminations, truncations, infos = envs.step(action.cpu().numpy(), iteration, step)
             next_done = np.logical_or(terminations, truncations)
             rewards[step] = torch.tensor(reward).to(device).view(-1)
-            next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(next_done).to(device)
+            # next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(next_done).to(device)
+            next_done = torch.Tensor(next_done).to(device)
 
             if "final_info" in infos:
                 for info in infos["final_info"]:
@@ -340,9 +356,15 @@ if __name__ == "__main__":
             returns = advantages + values
 
         # flatten the batch
-        b_obs = obs.reshape((-1,) + envs.single_observation_space.shape)
+        # b_obs = obs.reshape((-1,) + envs.single_observation_space.shape)
+        # b_logprobs = logprobs.reshape(-1)
+        # b_actions = actions.reshape((-1,) + envs.single_action_space.shape)
+        # b_advantages = advantages.reshape(-1)
+        # b_returns = returns.reshape(-1)
+        # b_values = values.reshape(-1)
+        b_obs = obs.reshape((-1, 1))
         b_logprobs = logprobs.reshape(-1)
-        b_actions = actions.reshape((-1,) + envs.single_action_space.shape)
+        b_actions = actions.reshape((-1, envs.action_space))
         b_advantages = advantages.reshape(-1)
         b_returns = returns.reshape(-1)
         b_values = values.reshape(-1)
