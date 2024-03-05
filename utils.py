@@ -29,14 +29,14 @@ def draw_Ihat(I_hat):
     plt.show()
 
 
-def draw_z(z, cls, s=25, x_highlight=None, y_highlight=None, save_path=None, display=True, title=None):
+def draw_z(z, cls, s=25, x_highlight=None, y_highlight=None, save_path=None, display=True, title=None, palette="Spectral"):
     """draw data and labels
 
     :param z: (n, 2) -- 2D data
     :param cls: (n, ) -- label/class for datapoints
     :param s: size, defaults to 25
     """
-
+    
     # re-organise as df
     try:
         tsne_data = np.hstack((z.numpy(), cls.reshape((-1,1)).numpy()))
@@ -50,7 +50,7 @@ def draw_z(z, cls, s=25, x_highlight=None, y_highlight=None, save_path=None, dis
     plt.figure(figsize=(10, 10), dpi=1500)
     
     # main figure
-    sn.FacetGrid(tsne_df, hue="label", height=6, palette="Spectral").map(plt.scatter, "Dim_1", "Dim_2", s=s).add_legend()
+    sn.FacetGrid(tsne_df, hue="label", height=6, palette=palette).map(plt.scatter, "Dim_1", "Dim_2", s=s).add_legend()
     # highlights
     if x_highlight!=None and y_highlight!=None:
         plt.scatter(x_highlight, y_highlight, marker='*', s=20, c='black', label='Highlighted Point')

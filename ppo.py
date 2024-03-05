@@ -25,9 +25,13 @@ import warnings
 warnings.filterwarnings('ignore')
 
 import pickle
+from copy import deepcopy
 
 @dataclass
 class Args:
+    run_name: str = ""
+    """resume previous checkpoint"""
+
     exp_name: str = os.path.basename(__file__)[: -len(".py")]
     """the name of this experiment"""
     seed: int = 1
@@ -54,7 +58,7 @@ class Args:
     """the learning rate of the optimizer"""
     num_envs: int = 1 # 4
     """the number of parallel game environments"""
-    num_steps: int = 10 # 128
+    num_steps: int = 6 # 10 # 128
     """the number of steps to run in each environment per policy rollout"""
     anneal_lr: bool = False # True
     """Toggle learning rate annealing for policy and value networks"""
@@ -260,11 +264,35 @@ class Agent(nn.Module):
         #     except:
         #         pass
 
-        logits = self.actor(state)
-        probs = Categorical(logits=logits)
-        if action is None:
-            action = probs.sample()
-        return action, probs.log_prob(action), probs.entropy(), self.critic(state)
+        if type(state)==type([]):
+            print(len(state))
+            ac = []
+            pbs = []
+            ent = []
+            value = []
+
+            for i in range(len(state)):
+                logits = self.actor(state[i])
+                probs = Categorical(logits=logits)
+                if action is None:
+                    action = probs.sample()
+                
+                ac.append(action)
+                pbs.append(probs.log_prob(action))
+                ent.append(probs.entropy())
+                value.append(self.critic(state[i]))
+            ac = torch.vstack(ac)
+            pbs = torch.vstack(pbs)
+            ent = torch.vstack(ent)
+            value = torch.vstack(value)
+            print(ac, pbs, ent, value)
+            return ac, pbs, ent, value
+        else:
+            logits = self.actor(state)
+            probs = Categorical(logits=logits)
+            if action is None:
+                action = probs.sample()
+            return action, probs.log_prob(action), probs.entropy(), self.critic(state)
 
 
 if __name__ == "__main__":
@@ -272,7 +300,13 @@ if __name__ == "__main__":
     args.batch_size = int(args.num_envs * args.num_steps)                   # 10
     args.minibatch_size = int(args.batch_size // args.num_minibatches)      # 5
     args.num_iterations = args.total_timesteps // args.batch_size           # 10
-    run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{time.strftime('%m%d%H%M%S', time.localtime())}"
+    
+    if args.run_name=="":
+        run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{time.strftime('%m%d%H%M%S', time.localtime())}"
+    else:
+        run_name = args.run_name
+    # run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{time.strftime('%m%d%H%M%S', time.localtime())}"
+
     if args.track:
         import wandb
 
@@ -313,6 +347,7 @@ if __name__ == "__main__":
         stepsize=6,
         random_state=None,
     )
+    print("data: {}, labels: {}".format(data.shape, labels.shape))
     envs = DREnv(
         data.astype('float32'), 
         labels.astype('float32'), 
@@ -335,7 +370,7 @@ if __name__ == "__main__":
 
     # obs = torch.zeros((args.num_steps, args.num_envs, 1)).to(device)
     obs = []
-    actions = torch.zeros((args.num_steps, args.num_envs, envs.action_space)).to(device)
+    actions = torch.zeros((args.num_steps, args.num_envs)).to(device)
     logprobs = torch.zeros((args.num_steps, args.num_envs)).to(device)
     rewards = torch.zeros((args.num_steps, args.num_envs)).to(device)
     dones = torch.zeros((args.num_steps, args.num_envs)).to(device)
@@ -371,10 +406,10 @@ if __name__ == "__main__":
 
             # TRY NOT TO MODIFY: execute the game and log data.
             next_obs, reward, terminations, truncations, infos = envs.next_step(action.cpu().numpy().item(), iteration, step)
-            next_done = np.logical_or(terminations, truncations)
+            # next_done = np.logical_or(terminations, truncations)
             rewards[step] = torch.tensor(reward).to(device).view(-1)
             # next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(next_done).to(device)
-            next_done = torch.Tensor(next_done).to(device)
+            next_done = torch.tensor(next_done).to(device)
 
             if "final_info" in infos:
                 for info in infos["final_info"]:
@@ -409,11 +444,12 @@ if __name__ == "__main__":
 
         b_obs = deepcopy(obs)
         b_logprobs = logprobs.reshape(-1)
-        b_actions = actions.reshape((-1, envs.action_space))
+        b_actions = actions.reshape(-1)
         b_advantages = advantages.reshape(-1)
         b_returns = returns.reshape(-1)
         b_values = values.reshape(-1)
-
+        # print(actions.shape, b_actions.shape)
+        # print(actions, b_actions)
         # Optimizing the policy and value network
         b_inds = np.arange(args.batch_size)
         clipfracs = []
@@ -422,8 +458,17 @@ if __name__ == "__main__":
             for start in range(0, args.batch_size, args.minibatch_size):
                 end = start + args.minibatch_size
                 mb_inds = b_inds[start:end]
-
-                _, newlogprob, entropy, newvalue = agent.get_action_and_value(b_obs[mb_inds], b_actions.long()[mb_inds])
+                # print(mb_inds, b_actions)
+                # bobs = b_obs[mb_inds]
+                # bacs = b_actions.long()[mb_inds]
+                # print(bobs, bacs)
+                # _, newlogprob, entropy, newvalue = agent.get_action_and_value(bobs, bacs)
+                # print(len(b_obs), mb_inds)
+                b_obs_i = [b_obs[i] for i in mb_inds]
+                b_actions_i = b_actions.long()[mb_inds]
+                # print(b_obs_i, b_actions_i)
+                print(mb_inds)
+                _, newlogprob, entropy, newvalue = agent.get_action_and_value(b_obs_i, b_actions_i)
                 logratio = newlogprob - b_logprobs[mb_inds]
                 ratio = logratio.exp()
 

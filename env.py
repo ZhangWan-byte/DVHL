@@ -11,13 +11,15 @@ from utils import *
 from myPaCMAP import *
 
 import itertools
+import time
 
 class DREnv(Env):
     def __init__(self, x, label, batch_size=1000, action_space=12, history_len=3, save_path=None):
         self.x = x
         self.label = label
         self.batch_size = batch_size
-        self.best_reward = float('-inf')
+        self.best_reward = 0
+        self.best_feedback = 0
 
         self.count = 0
         self.current_state = None
@@ -32,8 +34,8 @@ class DREnv(Env):
         self.history_rewards = [0] * history_len
         self.effect_history_actions = [0]
         self.history = F.one_hot(
-            torch.tensor(self.history_actions + self.effect_history_actions), num_classes=self.action_space
-        ).float().to(self.device)
+            torch.tensor(self.history_actions + self.effect_history_actions)+1, num_classes=self.action_space
+        ).float().to(self.device)           # +1: avoid negative-class in F.one_hot
 
         self.save_path = save_path
 
@@ -45,19 +47,11 @@ class DREnv(Env):
         :param MN_ratio: mid-pairs, defaults to 0.5
         :param FP_ratio: negatives, defaults to 2.0
         """
-        print(x.shape)
         if initial==True:
 
             n_neighbors = None
             MN_ratio = 0.5
             FP_ratio = 2.0
-
-        # # random sample batch if x is larger than batch_size
-        # if x.shape[0] > batch_size:
-        #     idx = torch.randperm(x.shape[0])[:batch_size]
-        #     x = x[idx]
-        #     if label is not None:
-        #         label = label[idx]
 
         num_nodes = x.shape[0]
 
@@ -127,7 +121,7 @@ class DREnv(Env):
         combinations = list(itertools.product(alpha_values, beta_values, gamma_values, hetero_homo))
         alpha, beta, gamma, hetero_homo = combinations[action % len(combinations)]
 
-        n_neighbors = alpha * self.current_state["n_neighbors"]
+        n_neighbors = int(alpha * self.current_state["n_neighbors"])
         MN_ratio = beta * self.current_state["MN_ratio"]
         FP_ratio = gamma * self.current_state["FP_ratio"]
 
@@ -154,13 +148,13 @@ class DREnv(Env):
             self.effect_history_actions = [-1]
 
         self.history = F.one_hot(
-            torch.tensor(self.history_actions + self.effect_history_actions), num_classes=self.action_space
+            torch.tensor(self.history_actions + self.effect_history_actions)+1, num_classes=self.action_space
         ).float().to(self.device)
 
         # 4. obtain state
-        state = self.obtain_state(self.x, self.label, batch_size, n_neighbors, MN_ratio, FP_ratio, initial=False)
+        state = self.obtain_state(self.x, self.label, self.batch_size, n_neighbors, MN_ratio, FP_ratio, initial=False)
 
-        return state
+        return state, reward
 
 
     def obtain_reward(self, state):
@@ -176,30 +170,45 @@ class DREnv(Env):
                 pair_FP=state["pair_FP"]
             )
 
+            name = "iter{}_step{}".format(self.iteration, self.step)
+            print("\n\n{} fit-transforming...".format(name))
+
+            t1 = time.time()
             z = self.reducer.fit_transform(self.x)
-            name = "{}_{}".format(self.iteration, self.step)
+            t2 = time.time()
+            print("time used for fit-transform: {} s".format(t2-t1))
+
+            plt.cla()
             draw_z(
                 z=normalise(z), 
-                cls=np.ones(z.shape), 
+                cls=np.ones((z.shape[0], 1)), 
                 s=1, 
                 save_path=os.path.join(self.save_path, name), 
                 display=False, 
-                title=self.step
+                title=name, 
+                palette=None
             )
-
-            while True:
-                if "{}.npy".format(name) in os.listdir(self.save_path):
-                    reward = np.load(os.path.join(self.save_path, "{}.npy".format(name)))
-                    break
+            features = np.zeros((5, 1))
+            print("Please refer to image {}.".format(os.path.join(self.save_path, name)))
+            features[0] = int(input("\n1. How many clusters?\n\tcount number of clusters\n"))
+            features[1] = int(input("\n2. Rate the shape of these clusters from 1 to 4\n\t'round -> oval -> spindle-shaped -> linear'.\n"))
+            features[2] = int(input("\n3. How many 'connections' between clusters?\n\tfrom one cluster, you know what's 'next' cluster\n"))
+            features[3] = int(input("\n4. Can you observe an obvious trend or ordinal relations between clusters? Scores from 1 to 5.\n\t1 - totally not\n\t2 - not obvious\n\t3 - partly trend\n\t4 - partial trend, need imagination\n\t5 - explicit trend\n"))
+            features[4] = int(input("\n5. Do you like this visualisation? Scores from 1 to 5.\n"))
+            np.save(os.path.join(self.save_path, "{}.npy".format(name)), features.reshape(1, -1))
+            
+            feedback = features[-1]
 
             # r1: compared to last reward
-            if reward > self.history_rewards[-1]:
+            if feedback > self.history_rewards[-1]:
                 r1 = 1
             else:
                 r1 = 0
 
             # r2: compared to best reward
-            r2 = r2 - self.best_reward
+            r2 = feedback - self.best_feedback
+            if r2>0:
+                self.best_feedback = feedback
 
             return r1 + r2
         
@@ -207,11 +216,6 @@ class DREnv(Env):
         self.count = self.count + 1
         self.iteration = iteration
         self.step = step
-
-        self.history_actions.append(action)
-        if np.count_nonzero(self.history_actions)>=self.history_len:
-            self.history_actions = self.history_actions[1:]
-            self.history_rewards = self.history_rewards[1:]
 
         # new_state = deepcopy(self.current_state)
 
@@ -226,7 +230,7 @@ class DREnv(Env):
         # else:
         #     raise Exception("Invalid action")
 
-        new_state = self.transition(action)
+        new_state, reward = self.transition(action)
         self.current_state = new_state
 
         # if self.current_state[1] == self.goal[1] and self.current_state[0] == self.goal[0]:
@@ -239,8 +243,9 @@ class DREnv(Env):
         #     done = True
 
         info = {}
-        terminations = False # accident or illegal situation
-        done = False if self.count<10 else True
+        terminations = 0 # accident or illegal situation
+        done = 0 if self.count<10 else 1
+
         return self.current_state, reward, terminations, done, info
 
     def render(self):
