@@ -4,6 +4,13 @@ from gym import spaces
 import numpy as np
 from copy import deepcopy
 
+import torch
+import torch.nn.functional as F
+
+from utils import *
+from myPaCMAP import *
+
+import itertools
 
 class DREnv(Env):
     def __init__(self, x, label, batch_size=1000, action_space=12, history_len=3, save_path=None):
@@ -118,7 +125,7 @@ class DREnv(Env):
 
         # 3 * 3 * 3 * 3 = 81 actions
         combinations = list(itertools.product(alpha_values, beta_values, gamma_values, hetero_homo))
-        alpha, beta, gamma, hetero_homo = combinations[x % len(combinations)]
+        alpha, beta, gamma, hetero_homo = combinations[action % len(combinations)]
 
         n_neighbors = alpha * self.current_state["n_neighbors"]
         MN_ratio = beta * self.current_state["MN_ratio"]
@@ -173,12 +180,13 @@ class DREnv(Env):
             name = "{}_{}".format(self.iteration, self.step)
             draw_z(
                 z=normalise(z), 
-                cls=self.label, 
+                cls=np.ones(z.shape), 
                 s=1, 
                 save_path=os.path.join(self.save_path, name), 
-                display=True, 
+                display=False, 
                 title=self.step
             )
+
             while True:
                 if "{}.npy".format(name) in os.listdir(self.save_path):
                     reward = np.load(os.path.join(self.save_path, "{}.npy".format(name)))
@@ -195,7 +203,7 @@ class DREnv(Env):
 
             return r1 + r2
         
-    def step(self, action, iteration, step):
+    def next_step(self, action, iteration, step):
         self.count = self.count + 1
         self.iteration = iteration
         self.step = step

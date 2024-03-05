@@ -8,6 +8,7 @@ import gymnasium as gym
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.optim as optim
 import tyro
 from torch.distributions.categorical import Categorical
@@ -18,8 +19,12 @@ from torch.nn import MultiheadAttention
 
 from annoy import AnnoyIndex
 from myPaCMAP import distance_to_option
-from ppo import DREnv
+from env import DREnv
 
+import warnings
+warnings.filterwarnings('ignore')
+
+import pickle
 
 @dataclass
 class Args:
@@ -98,6 +103,33 @@ def make_env(env_id, idx, capture_video, run_name):
     return thunk
 
 
+def gauss_clusters(
+    n_clusters=10, dim=10, pts_cluster=100, random_state=None, cov=1, stepsize=1,
+):
+
+    if random_state is None:
+        rng = np.random.RandomState()
+    else:
+        rng = random_state
+
+    n = n_clusters * pts_cluster
+
+    s = stepsize / np.sqrt(dim)
+    means = np.linspace(np.zeros(dim), n_clusters * s, num=n_clusters, endpoint=False)
+    cshift_mask = np.zeros(n_clusters, dtype=bool)
+    cshift_mask[15] = True
+    cov = np.eye(dim) * cov
+
+    clusters = np.array(
+        [rng.multivariate_normal(m, cov, size=(pts_cluster)) for m in means]
+    )
+
+    X = np.reshape(clusters, (-1, dim))
+
+    y = np.repeat(np.arange(n_clusters), pts_cluster)
+    return X, y
+
+
 def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
     torch.nn.init.orthogonal_(layer.weight, std)
     torch.nn.init.constant_(layer.bias, bias_const)
@@ -133,14 +165,16 @@ def get_scaledKNN(X, _RANDOM_STATE=None):
     return scaled_dist
 
 class GAT(torch.nn.Module):
-    def __init__(self, num_node_features=50, hidden=32, num_actions=81, std=1.0, device=torch.device('cpu')):
+    def __init__(self, num_node_features=50, hidden=32, num_actions=81, out_dim=1, std=1.0, device=torch.device('cpu')):
         super().__init__()
         self.hidden = hidden
         self.num_actions = num_actions
         self.device = device
-        
-        self.conv1 = GATv2Conv(num_node_features, hidden, edge_dim=2)
-        self.conv2 = GATv2Conv(hidden, hidden, edge_dim=2)
+        self.edge_dim = 4
+        self.out_dim = out_dim
+
+        self.conv1 = GATv2Conv(num_node_features, hidden, edge_dim=self.edge_dim)
+        self.conv2 = GATv2Conv(hidden, hidden, edge_dim=self.edge_dim)
         
         # graph feature
         self.pooling = MultiheadAttention(embed_dim=hidden, num_heads=2)        
@@ -155,15 +189,15 @@ class GAT(torch.nn.Module):
         self.gru = nn.GRU(input_size=num_actions, hidden_size=hidden, num_layers=1)
 
         # prediction head
-        self.head = nn.Sequantial(
-            layer_init(nn.Linear(in_features=hidden*2, out_features=hidden)), 
+        self.head = nn.Sequential(
+            layer_init(nn.Linear(in_features=hidden*(1+self.edge_dim), out_features=hidden)), 
             nn.LeakyReLU(),
-            layer_init(nn.Linear(in_features=hidden, out_features=self.num_actions), std=std)
+            layer_init(nn.Linear(in_features=hidden, out_features=self.out_dim), std=std)
         )
 
     def forward(self, state):
 
-        x, edge_index, edge_attr, history = state["x"], state["edge_index"], state["edge_attr"], state["history"]
+        x, edge_index, edge_attr, history = state["x"].float(), state["edge_index"].long(), state["edge_attr"].float(), state["history"].float()
 
         n, f = x.shape[0], self.hidden
 
@@ -179,10 +213,12 @@ class GAT(torch.nn.Module):
         x = self.mlp(x).view(1,-1)
 
         # History features
-        hist = gru(history).view(1, -1)
+        out, _ = self.gru(history)
+        # out = out.max(dim=0).view(1,-1)
+        out = out.flatten().view(1, -1)
 
         # Prediction head
-        out = torch.cat([x, hist], dim=1)
+        out = torch.cat([x, out], dim=1)
         out = self.head(out)
 
         return out
@@ -207,18 +243,22 @@ class Agent(nn.Module):
         #     layer_init(nn.Linear(64, envs.single_action_space.n), std=0.01),
         # )
 
-        self.critic = GAT(num_node_features, hidden, num_actions=1, std=1.0)
-        self.actor = GAT(num_node_features, hidden, num_actions=num_actions, std=0.01)
+        self.critic = GAT(num_node_features, hidden, num_actions=num_actions, out_dim=1, std=1.0)
+        self.actor = GAT(num_node_features, hidden, num_actions=num_actions, out_dim=num_actions, std=0.01)
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     def get_value(self, state):
-        for key, value in state.items():
-            state[key] = state[key].to(self.device)
+        # for key, value in state.items():
+        #     state[key] = state[key].to(self.device)
 
         return self.critic(state)
 
     def get_action_and_value(self, state, action=None):
-        for key, value in state.items():
-            state[key] = state[key].to(self.device)
+        # for key, value in state.items():
+        #     try:
+        #         state[key] = state[key].to(self.device)
+        #     except:
+        #         pass
 
         logits = self.actor(state)
         probs = Categorical(logits=logits)
@@ -250,6 +290,7 @@ if __name__ == "__main__":
         "hyperparameters",
         "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
     )
+    # pickle.dump(open(f"runs/{run_name}/args.pkl", "w"), args)
 
     # TRY NOT TO MODIFY: seeding
     random.seed(args.seed)
@@ -270,9 +311,16 @@ if __name__ == "__main__":
         dim=50,
         pts_cluster=1000,
         stepsize=6,
-        random_state=args.seed,
+        random_state=None,
     )
-    envs = DREnv(data, label, batch_size=1000, action_space=81, history_len=3, save_path=f"runs/{run_name}")
+    envs = DREnv(
+        data.astype('float32'), 
+        labels.astype('float32'), 
+        batch_size=1000, 
+        action_space=81, 
+        history_len=3, 
+        save_path=f"runs/{run_name}"
+    )
 
     agent = Agent(envs).to(device)
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
@@ -285,14 +333,8 @@ if __name__ == "__main__":
     # dones = torch.zeros((args.num_steps, args.num_envs)).to(device)
     # values = torch.zeros((args.num_steps, args.num_envs)).to(device)
 
-    # obs = []
-    # actions = []
-    # logprobs = []
-    # rewards = []
-    # dones = []
-    # values = []
-
-    obs = torch.zeros((args.num_steps, args.num_envs, 1)).to(device)
+    # obs = torch.zeros((args.num_steps, args.num_envs, 1)).to(device)
+    obs = []
     actions = torch.zeros((args.num_steps, args.num_envs, envs.action_space)).to(device)
     logprobs = torch.zeros((args.num_steps, args.num_envs)).to(device)
     rewards = torch.zeros((args.num_steps, args.num_envs)).to(device)
@@ -302,7 +344,8 @@ if __name__ == "__main__":
     # TRY NOT TO MODIFY: start the game
     global_step = 0
     start_time = time.time()
-    next_obs, _ = envs.reset(seed=args.seed)
+    # next_obs, _ = envs.reset(seed=args.seed)
+    next_obs = envs.reset()
     # next_obs = torch.Tensor(next_obs).to(device)
     next_done = torch.zeros(args.num_envs).to(device)
 
@@ -315,7 +358,8 @@ if __name__ == "__main__":
 
         for step in range(0, args.num_steps):
             global_step += args.num_envs
-            obs[step] = next_obs
+            # obs[step] = next_obs
+            obs.append(next_obs)
             dones[step] = next_done
 
             # ALGO LOGIC: action logic
@@ -326,7 +370,7 @@ if __name__ == "__main__":
             logprobs[step] = logprob
 
             # TRY NOT TO MODIFY: execute the game and log data.
-            next_obs, reward, terminations, truncations, infos = envs.step(action.cpu().numpy(), iteration, step)
+            next_obs, reward, terminations, truncations, infos = envs.next_step(action.cpu().numpy().item(), iteration, step)
             next_done = np.logical_or(terminations, truncations)
             rewards[step] = torch.tensor(reward).to(device).view(-1)
             # next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(next_done).to(device)
@@ -362,7 +406,8 @@ if __name__ == "__main__":
         # b_advantages = advantages.reshape(-1)
         # b_returns = returns.reshape(-1)
         # b_values = values.reshape(-1)
-        b_obs = obs.reshape((-1, 1))
+
+        b_obs = deepcopy(obs)
         b_logprobs = logprobs.reshape(-1)
         b_actions = actions.reshape((-1, envs.action_space))
         b_advantages = advantages.reshape(-1)
