@@ -242,10 +242,12 @@ class DREnv(Env):
         # if self.count > 200:
         #     done = True
 
-        info = {}
         terminations = 0 # accident or illegal situation
         done = 0 if self.count<10 else 1
-
+        if done!=1:
+            info = {}
+        else:
+            info = {"episode": {"r":self.best_reward, "l": self.count}}
         return self.current_state, reward, terminations, done, info
 
     def render(self):

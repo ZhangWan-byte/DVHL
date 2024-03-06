@@ -26,6 +26,7 @@ warnings.filterwarnings('ignore')
 
 import pickle
 from copy import deepcopy
+from tqdm import tqdm
 
 @dataclass
 class Args:
@@ -60,7 +61,7 @@ class Args:
     """the number of parallel game environments"""
     num_steps: int = 6 # 10 # 128
     """the number of steps to run in each environment per policy rollout"""
-    anneal_lr: bool = False # True
+    anneal_lr: bool = True # False # True
     """Toggle learning rate annealing for policy and value networks"""
     gamma: float = 0.99
     """the discount factor gamma"""
@@ -68,7 +69,7 @@ class Args:
     """the lambda for the general advantage estimation"""
     num_minibatches: int = 2 # 4
     """the number of mini-batches"""
-    update_epochs: int = 10 # 4
+    update_epochs: int = 4
     """the K epochs to update the policy"""
     norm_adv: bool = True
     """Toggles advantages normalization"""
@@ -265,7 +266,7 @@ class Agent(nn.Module):
         #         pass
 
         if type(state)==type([]):
-            print(len(state))
+            # print(len(state))
             ac = []
             pbs = []
             ent = []
@@ -285,13 +286,20 @@ class Agent(nn.Module):
             pbs = torch.vstack(pbs)
             ent = torch.vstack(ent)
             value = torch.vstack(value)
-            print(ac, pbs, ent, value)
+            # print(ac, pbs, ent, value)
             return ac, pbs, ent, value
         else:
             logits = self.actor(state)
-            probs = Categorical(logits=logits)
-            if action is None:
-                action = probs.sample()
+            try:
+                probs = Categorical(logits=logits)
+                if action is None:
+                    action = probs.sample()
+
+            except:
+                pickle.dump(state, open("./error_state.pkl", "wb"))
+                pickle.dump(logits, open("./error_logits.pkl", "wb"))
+                exit()
+            
             return action, probs.log_prob(action), probs.entropy(), self.critic(state)
 
 
@@ -357,7 +365,7 @@ if __name__ == "__main__":
         save_path=f"runs/{run_name}"
     )
 
-    agent = Agent(envs).to(device)
+    agent = Agent(envs, num_node_features=50, hidden=16, num_actions=81).to(device)
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
     # ALGO Logic: Storage setup
@@ -455,7 +463,7 @@ if __name__ == "__main__":
         clipfracs = []
         for epoch in range(args.update_epochs):
             np.random.shuffle(b_inds)
-            for start in range(0, args.batch_size, args.minibatch_size):
+            for start in tqdm(range(0, args.batch_size, args.minibatch_size)):
                 end = start + args.minibatch_size
                 mb_inds = b_inds[start:end]
                 # print(mb_inds, b_actions)
@@ -467,7 +475,7 @@ if __name__ == "__main__":
                 b_obs_i = [b_obs[i] for i in mb_inds]
                 b_actions_i = b_actions.long()[mb_inds]
                 # print(b_obs_i, b_actions_i)
-                print(mb_inds)
+                # print(mb_inds)
                 _, newlogprob, entropy, newvalue = agent.get_action_and_value(b_obs_i, b_actions_i)
                 logratio = newlogprob - b_logprobs[mb_inds]
                 ratio = logratio.exp()
