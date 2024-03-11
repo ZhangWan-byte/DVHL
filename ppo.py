@@ -290,15 +290,9 @@ class Agent(nn.Module):
             return ac, pbs, ent, value
         else:
             logits = self.actor(state)
-            try:
-                probs = Categorical(logits=logits)
-                if action is None:
-                    action = probs.sample()
-
-            except:
-                pickle.dump(state, open("./error_state.pkl", "wb"))
-                pickle.dump(logits, open("./error_logits.pkl", "wb"))
-                exit()
+            probs = Categorical(logits=logits)
+            if action is None:
+                action = probs.sample()
             
             return action, probs.log_prob(action), probs.entropy(), self.critic(state)
 
@@ -407,7 +401,14 @@ if __name__ == "__main__":
 
             # ALGO LOGIC: action logic
             with torch.no_grad():
-                action, logprob, _, value = agent.get_action_and_value(next_obs)
+                try:
+                    action, logprob, _, value = agent.get_action_and_value(next_obs)
+                except:
+                    pickle.dump(next_obs, open("./error_next_obs.pkl", "wb"))
+                    torch.save(self.actor.state_dict(), "./error_actor1.pt")
+                    torch.save(self.critic.state_dict(), "./error_critic1.pt")
+                    exit()
+
                 values[step] = value.flatten()
             actions[step] = action
             logprobs[step] = logprob
@@ -476,7 +477,14 @@ if __name__ == "__main__":
                 b_actions_i = b_actions.long()[mb_inds]
                 # print(b_obs_i, b_actions_i)
                 # print(mb_inds)
-                _, newlogprob, entropy, newvalue = agent.get_action_and_value(b_obs_i, b_actions_i)
+                try:
+                    _, newlogprob, entropy, newvalue = agent.get_action_and_value(b_obs_i, b_actions_i)
+                except:
+                    pickle.dump(b_obs_i, open("./error_b_obs_i.pkl", "wb"))
+                    torch.save(agent.actor.state_dict(), "./error_actor2.pt")
+                    torch.save(agent.critic.state_dict(), "./error_critic2.pt")
+                    exit()
+
                 logratio = newlogprob - b_logprobs[mb_inds]
                 ratio = logratio.exp()
 
