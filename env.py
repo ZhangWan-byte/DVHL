@@ -138,7 +138,7 @@ class DREnv(Env):
         self.history_actions = self.history_actions[1:]
 
         # update history rewards
-        self.history_rewards.append(reward)
+        self.history_rewards.append(reward.item())
         self.history_rewards = self.history_rewards[1:]
 
         # add history info to state

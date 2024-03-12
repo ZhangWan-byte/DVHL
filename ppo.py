@@ -299,9 +299,9 @@ class Agent(nn.Module):
 
 if __name__ == "__main__":
     args = tyro.cli(Args)
-    args.batch_size = int(args.num_envs * args.num_steps)                   # 10
-    args.minibatch_size = int(args.batch_size // args.num_minibatches)      # 5
-    args.num_iterations = args.total_timesteps // args.batch_size           # 10
+    args.batch_size = int(args.num_envs * args.num_steps)                   # 6 / 10
+    args.minibatch_size = int(args.batch_size // args.num_minibatches)      # 6 / 5
+    args.num_iterations = args.total_timesteps // args.batch_size           # 4 / 10
     
     if args.run_name=="":
         run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{time.strftime('%m%d%H%M%S', time.localtime())}"
@@ -405,8 +405,10 @@ if __name__ == "__main__":
                     action, logprob, _, value = agent.get_action_and_value(next_obs)
                 except:
                     pickle.dump(next_obs, open("./error_next_obs.pkl", "wb"))
-                    torch.save(self.actor.state_dict(), "./error_actor1.pt")
-                    torch.save(self.critic.state_dict(), "./error_critic1.pt")
+                    torch.save(torch.tensor(envs.history_rewards), "./error_history_rewards1.pt")
+                    torch.save(torch.tensor(envs.history_actions), "./error_history_actions1.pt")
+                    torch.save(agent.actor.state_dict(), "./error_actor1.pt")
+                    torch.save(agent.critic.state_dict(), "./error_critic1.pt")
                     exit()
 
                 values[step] = value.flatten()
@@ -419,6 +421,8 @@ if __name__ == "__main__":
             rewards[step] = torch.tensor(reward).to(device).view(-1)
             # next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(next_done).to(device)
             next_done = torch.tensor(next_done).to(device)
+
+            print(envs.history_len, envs.history_rewards, envs.history_actions, reward, next_done)
 
             if "final_info" in infos:
                 for info in infos["final_info"]:
@@ -481,6 +485,8 @@ if __name__ == "__main__":
                     _, newlogprob, entropy, newvalue = agent.get_action_and_value(b_obs_i, b_actions_i)
                 except:
                     pickle.dump(b_obs_i, open("./error_b_obs_i.pkl", "wb"))
+                    torch.save(torch.tensor(envs.history_rewards), "./error_history_reward2.pt")
+                    torch.save(torch.tensor(envs.history_actions), "./error_history_actions2.pt")
                     torch.save(agent.actor.state_dict(), "./error_actor2.pt")
                     torch.save(agent.critic.state_dict(), "./error_critic2.pt")
                     exit()
