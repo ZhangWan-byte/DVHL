@@ -81,7 +81,7 @@ class Args:
     """coefficient of the entropy"""
     vf_coef: float = 0.5
     """coefficient of the value function"""
-    max_grad_norm: float = 0.5
+    max_grad_norm: float = 0.1 # 0.5
     """the maximum norm for the gradient clipping"""
     target_kl: float = None
     """the target KL divergence threshold"""
@@ -214,8 +214,9 @@ class GAT(torch.nn.Module):
 
         # Readout layer
         x, _ = self.pooling(x, x, x)
-        x = x.sum(dim=0)
-        x = self.mlp(x).view(1,-1)
+        # x = x.sum(dim=0)
+        x, _ = torch.max(x, dim=0)
+        x = self.mlp(x.view(1,-1)).view(1,-1)
 
         # History features
         out, _ = self.gru(history)
@@ -404,6 +405,7 @@ if __name__ == "__main__":
                 try:
                     action, logprob, _, value = agent.get_action_and_value(next_obs)
                 except:
+                    print(action, logprob, value)
                     pickle.dump(next_obs, open("./error_next_obs.pkl", "wb"))
                     torch.save(torch.tensor(envs.history_rewards), "./error_history_rewards1.pt")
                     torch.save(torch.tensor(envs.history_actions), "./error_history_actions1.pt")
@@ -446,6 +448,7 @@ if __name__ == "__main__":
                 delta = rewards[t] + args.gamma * nextvalues * nextnonterminal - values[t]
                 advantages[t] = lastgaelam = delta + args.gamma * args.gae_lambda * nextnonterminal * lastgaelam
             returns = advantages + values
+            print("advantages, returns: ", advantages, returns)
 
         # flatten the batch
         # b_obs = obs.reshape((-1,) + envs.single_observation_space.shape)
@@ -484,6 +487,7 @@ if __name__ == "__main__":
                 try:
                     _, newlogprob, entropy, newvalue = agent.get_action_and_value(b_obs_i, b_actions_i)
                 except:
+                    print(newlogprob, entropy, newvalue)
                     pickle.dump(b_obs_i, open("./error_b_obs_i.pkl", "wb"))
                     torch.save(torch.tensor(envs.history_rewards), "./error_history_reward2.pt")
                     torch.save(torch.tensor(envs.history_actions), "./error_history_actions2.pt")
@@ -493,7 +497,7 @@ if __name__ == "__main__":
 
                 logratio = newlogprob - b_logprobs[mb_inds]
                 ratio = logratio.exp()
-
+                print("logratio: ", logratio)
                 with torch.no_grad():
                     # calculate approx_kl http://joschu.net/blog/kl-approx.html
                     old_approx_kl = (-logratio).mean()
@@ -501,9 +505,10 @@ if __name__ == "__main__":
                     clipfracs += [((ratio - 1.0).abs() > args.clip_coef).float().mean().item()]
 
                 mb_advantages = b_advantages[mb_inds]
+                print("mb_advantages: ", mb_advantages)
                 if args.norm_adv:
                     mb_advantages = (mb_advantages - mb_advantages.mean()) / (mb_advantages.std() + 1e-8)
-
+                print("mb_advantages, ratio: ", mb_advantages, ratio)
                 # Policy loss
                 pg_loss1 = -mb_advantages * ratio
                 pg_loss2 = -mb_advantages * torch.clamp(ratio, 1 - args.clip_coef, 1 + args.clip_coef)
@@ -526,7 +531,7 @@ if __name__ == "__main__":
 
                 entropy_loss = entropy.mean()
                 loss = pg_loss - args.ent_coef * entropy_loss + v_loss * args.vf_coef
-
+                print("loss: ", loss, pg_loss, entropy_loss, v_loss)
                 optimizer.zero_grad()
                 loss.backward()
                 nn.utils.clip_grad_norm_(agent.parameters(), args.max_grad_norm)
