@@ -133,5 +133,8 @@ def get_Ihat(Z, size=1000):
     for i in range(len(Z)):
         xx = min(int(np.floor(Z[i,0]*size)), size-1)
         yy = min(int(np.floor(Z[i,1]*size)), size-1)
-        mat[xx,yy] = Z[i, 2]
+        if Z.shape[1]==3:
+            mat[xx,yy] = Z[i, 2]
+        else:
+            mat[xx,yy] = 1
     return mat
