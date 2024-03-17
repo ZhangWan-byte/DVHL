@@ -47,6 +47,7 @@ class DREnv(Env):
         self.history = F.one_hot(
             torch.tensor(self.history_actions + self.effect_history_actions)+1, num_classes=self.action_space
         ).float().to(self.device)           # +1: avoid negative-class in F.one_hot
+        self.history_feedbacks = []
 
         self.save_path = save_path
 
@@ -216,7 +217,7 @@ class DREnv(Env):
             feedback = torch.argmax(out) + 1            # scores in {1,2,3,4,5}
 
             # r1: compared to last reward
-            if feedback > self.history_rewards[-1]:
+            if len(self.history_feedbacks)==0 or feedback > self.history_feedbacks[-1]:
                 r1 = 1
             else:
                 r1 = 0
@@ -225,6 +226,9 @@ class DREnv(Env):
             r2 = feedback - self.best_feedback
             if r2>0:
                 self.best_feedback = feedback
+            
+            print("feedback: {}, history_feedbacks: {}, r1: {}, r2: {}".format(feedback, self.history_feedbacks, r1, r2))
+            self.history_feedbacks.append(feedback)
 
             return r1 + r2
         
