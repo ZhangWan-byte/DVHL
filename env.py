@@ -8,13 +8,14 @@ import torch
 import torch.nn.functional as F
 
 from utils import *
+from models import *
 from myPaCMAP import *
 
 import itertools
 import time
 
 class DREnv(Env):
-    def __init__(self, x, label, batch_size=1000, action_space=12, history_len=3, save_path=None):
+    def __init__(self, x, label, model_path="./exp1/model_CosAnneal1.pt", batch_size=1000, action_space=12, history_len=3, save_path=None):
         self.x = x
         self.label = label
         self.batch_size = batch_size
@@ -26,6 +27,16 @@ class DREnv(Env):
         self.action_space = action_space
 
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+        self.model = ResNet(
+            block=BasicBlock, 
+            num_block=[1,1,1,1], 
+            num_classes=5, 
+            in_channels=1, 
+            out_channels=[10, 16, 24, 32]
+        ).cuda()
+        self.model.load_state_dict(torch.load(model_path))
+
 
         # history_actions: +1 / 0 / -1
         # effect_history_actions: +1 / 0 / -1
@@ -188,16 +199,21 @@ class DREnv(Env):
                 title=name, 
                 palette=None
             )
-            features = np.zeros((5, 1))
-            print("Please refer to image {}.".format(os.path.join(self.save_path, name)))
-            features[0] = int(input("\n1. How many clusters?\n\tcount number of clusters\n"))
-            features[1] = int(input("\n2. Rate the shape of these clusters from 1 to 4\n\t'round -> oval -> spindle-shaped -> linear'.\n"))
-            features[2] = int(input("\n3. How many 'connections' between clusters?\n\tfrom one cluster, you know what's 'next' cluster\n"))
-            features[3] = int(input("\n4. Can you observe an obvious trend or ordinal relations between clusters? Scores from 1 to 5.\n\t1 - totally not\n\t2 - not obvious\n\t3 - partly trend\n\t4 - partial trend, need imagination\n\t5 - explicit trend\n"))
-            features[4] = int(input("\n5. Do you like this visualisation? Scores from 1 to 5.\n"))
-            np.save(os.path.join(self.save_path, "{}.npy".format(name)), features.reshape(1, -1))
+            # features = np.zeros((5, 1))
+            # print("Please refer to image {}.".format(os.path.join(self.save_path, name)))
+            # features[0] = int(input("\n1. How many clusters?\n\tcount number of clusters\n"))
+            # features[1] = int(input("\n2. Rate the shape of these clusters from 1 to 4\n\t'round -> oval -> spindle-shaped -> linear'.\n"))
+            # features[2] = int(input("\n3. How many 'connections' between clusters?\n\tfrom one cluster, you know what's 'next' cluster\n"))
+            # features[3] = int(input("\n4. Can you observe an obvious trend or ordinal relations between clusters? Scores from 1 to 5.\n\t1 - totally not\n\t2 - not obvious\n\t3 - partly trend\n\t4 - partial trend, need imagination\n\t5 - explicit trend\n"))
+            # features[4] = int(input("\n5. Do you like this visualisation? Scores from 1 to 5.\n"))
+            # np.save(os.path.join(self.save_path, "{}.npy".format(name)), features.reshape(1, -1))
             
-            feedback = features[-1]
+            # feedback = features[-1]
+
+            z = get_Ihat(normalise(z), size=100)
+            z = torch.from_numpy(z).view(1,1,100,100).float().cuda()
+            out = self.model(z).detach().cpu().view(-1)
+            feedback = torch.argmax(out) + 1            # scores in {1,2,3,4,5}
 
             # r1: compared to last reward
             if feedback > self.history_rewards[-1]:

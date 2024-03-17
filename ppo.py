@@ -363,6 +363,9 @@ if __name__ == "__main__":
     agent = Agent(envs, num_node_features=50, hidden=16, num_actions=81).to(device)
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
+    print("actor params: {}".format(sum([p.numel() for p in agent.actor.parameters()])))
+    print("critic params: {}".format(sum([p.numel() for p in agent.critic.parameters()])))
+
     # ALGO Logic: Storage setup
     # obs = torch.zeros((args.num_steps, args.num_envs) + envs.single_observation_space.shape).to(device)
     # actions = torch.zeros((args.num_steps, args.num_envs) + envs.single_action_space.shape).to(device)
