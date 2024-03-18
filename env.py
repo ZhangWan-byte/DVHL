@@ -15,7 +15,7 @@ import itertools
 import time
 
 class DREnv(Env):
-    def __init__(self, x, label, model_path="./exp1/model_CosAnneal1.pt", batch_size=1000, action_space=12, history_len=3, save_path=None):
+    def __init__(self, x, label, model_path="./exp1/model_CosAnneal1.pt", batch_size=1000, action_space=12, history_len=3, save_path=None, num_steps=12):
         self.x = x
         self.label = label
         self.batch_size = batch_size
@@ -37,19 +37,32 @@ class DREnv(Env):
         ).cuda()
         self.model.load_state_dict(torch.load(model_path))
 
+        # actions
+        self.alpha_values = [0.8, 1.0, 1.2]                # value range of ratio of kNN
+        self.beta_values = [0.8, 1.0, 1.2]                 # value range of ratio of mid-pairs
+        self.gamma_values = [0.8, 1.0, 1.2]                # value range of ratio of negatives
+        self.hetero_homo = [0, 1, 2]                       # 0 - random / 1 - hetero / 2 - homo
+        # 3 * 3 * 3 * 3 = 81 actions (0,1,...,80)
+        self.combinations = list(
+            itertools.product(self.alpha_values, self.beta_values, self.gamma_values, self.hetero_homo)
+        )
 
         # history_actions: +1 / 0 / -1
-        # effect_history_actions: +1 / 0 / -1
+        # effect_history_actions: -1 / -2
         self.history_len = history_len
         self.history_actions = [0] * history_len
         self.history_rewards = [0] * history_len
         self.effect_history_actions = [0]
+
+        # like a sentence, abcdefg0 / fdsjkhy1, each charachter is one_hot
         self.history = F.one_hot(
-            torch.tensor(self.history_actions + self.effect_history_actions)+1, num_classes=self.action_space
-        ).float().to(self.device)           # +1: avoid negative-class in F.one_hot
+            torch.tensor(self.history_actions + self.effect_history_actions)+2, num_classes=self.action_space+2
+        ).float().to(self.device)           # +2: avoid negative-class in F.one_hot / 2 situations of effect
         self.history_feedbacks = []
 
         self.save_path = save_path
+
+        self.num_steps = num_steps
 
     def obtain_state(self, x, label=None, batch_size=1000, n_neighbors=None, MN_ratio=0.5, FP_ratio=2.0, initial=False):
         """generate graph -- from params to state (graph)
@@ -104,9 +117,7 @@ class DREnv(Env):
             "label": torch.from_numpy(label).to(self.device), 
             "edge_index": torch.from_numpy(edge_index).long().to(self.device), 
             "edge_attr": torch.from_numpy(edge_attr).to(self.device), 
-
-            # "history_actions": self.history_actions, 
-            # "effect_history_actions": self.effect_history_actions, 
+ 
             "history": self.history.to(self.device), 
 
             "n_neighbors": n_neighbors, 
@@ -123,15 +134,7 @@ class DREnv(Env):
 
     def transition(self, action):
         
-        # 1. get action
-        alpha_values = [0.8, 1.0, 1.2]                # value range of ratio of kNN
-        beta_values = [0.8, 1.0, 1.2]                 # value range of ratio of mid-pairs
-        gamma_values = [0.8, 1.0, 1.2]                # value range of ratio of negatives
-        hetero_homo = [0, 1, 2]                       # 0 - random / 1 - hetero / 2 - homo
-
-        # 3 * 3 * 3 * 3 = 81 actions
-        combinations = list(itertools.product(alpha_values, beta_values, gamma_values, hetero_homo))
-        alpha, beta, gamma, hetero_homo = combinations[action % len(combinations)]
+        alpha, beta, gamma, hetero_homo = self.combinations[action % len(self.combinations)]
 
         n_neighbors = int(alpha * self.current_state["n_neighbors"])
         MN_ratio = beta * self.current_state["MN_ratio"]
@@ -155,12 +158,12 @@ class DREnv(Env):
 
         # add history info to state
         if reward > self.history_rewards[0]:
-            self.effect_history_actions = [1]
-        else:
             self.effect_history_actions = [-1]
+        else:
+            self.effect_history_actions = [-2]
 
         self.history = F.one_hot(
-            torch.tensor(self.history_actions + self.effect_history_actions)+1, num_classes=self.action_space
+            torch.tensor(self.history_actions + self.effect_history_actions)+2, num_classes=self.action_space+2
         ).float().to(self.device)
 
         # 4. obtain state
@@ -228,7 +231,7 @@ class DREnv(Env):
                 self.best_feedback = feedback
             
             print("feedback: {}, history_feedbacks: {}, r1: {}, r2: {}".format(feedback, self.history_feedbacks, r1, r2))
-            self.history_feedbacks.append(feedback)
+            self.history_feedbacks.append(feedback.item())
 
             return r1 + r2
         
@@ -262,12 +265,24 @@ class DREnv(Env):
         # if self.count > 200:
         #     done = True
 
-        terminations = 0 # accident or illegal situation
-        done = 0 if self.count<10 else 1
+        # # accident or illegal situation
+        # alpha, beta, gamma, hetero_homo = self.combinations[action % len(self.combinations)]
+        # n_neighbors = int(alpha * self.current_state["n_neighbors"])
+        # MN_ratio = beta * self.current_state["MN_ratio"]
+        # FP_ratio = gamma * self.current_state["FP_ratio"]
+
+        # if n_neighbors <= 0 or MN_ratio*n_neighbors < 1 or FP_ratio * n_neighbors < 1:
+        #     terminations = 1
+        # else:
+        #     terminations = 0 
+        terminations = 0
+
+        done = 0 if self.count<self.num_steps else 1
         if done!=1:
             info = {}
         else:
             info = {"episode": {"r":self.best_reward, "l": self.count}}
+            
         return self.current_state, reward, terminations, done, info
 
     def render(self):

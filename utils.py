@@ -6,6 +6,7 @@ import pandas as pd
 import seaborn as sn
 from tqdm import tqdm
 import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 import sklearn
@@ -72,6 +73,7 @@ def draw_z(z, cls, s=25, x_highlight=None, y_highlight=None, save_path=None, dis
         plt.show()
     else:
         plt.ioff()
+        plt.clf()   
         plt.close()
 
 

@@ -191,7 +191,7 @@ class GAT(torch.nn.Module):
         )
 
         # history feature
-        self.gru = nn.GRU(input_size=num_actions, hidden_size=hidden, num_layers=1)
+        self.gru = nn.GRU(input_size=num_actions+2, hidden_size=hidden, num_layers=1)
 
         # prediction head
         self.head = nn.Sequential(
@@ -300,9 +300,9 @@ class Agent(nn.Module):
 
 if __name__ == "__main__":
     args = tyro.cli(Args)
-    args.batch_size = int(args.num_envs * args.num_steps)                   # 6 / 10
-    args.minibatch_size = int(args.batch_size // args.num_minibatches)      # 6 / 5
-    args.num_iterations = args.total_timesteps // args.batch_size           # 4 / 10
+    args.batch_size = int(args.num_envs * args.num_steps)                   # 12
+    args.minibatch_size = int(args.batch_size // args.num_minibatches)      # 4
+    args.num_iterations = args.total_timesteps // args.batch_size           # [100/12]=9
     
     if args.run_name=="":
         run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{time.strftime('%m%d%H%M%S', time.localtime())}"
@@ -350,6 +350,8 @@ if __name__ == "__main__":
         stepsize=6,
         random_state=None,
     )
+    idx = np.random.choice(data.shape[0], 1000, replace=False)
+    data, labels = data[idx], labels[idx]
     print("data: {}, labels: {}".format(data.shape, labels.shape))
     envs = DREnv(
         data.astype('float32'), 
@@ -357,7 +359,8 @@ if __name__ == "__main__":
         batch_size=1000, 
         action_space=81, 
         history_len=3, 
-        save_path=f"runs/{run_name}"
+        save_path=f"runs/{run_name}", 
+        num_steps = args.num_steps
     )
 
     agent = Agent(envs, num_node_features=50, hidden=16, num_actions=81).to(device)
@@ -374,14 +377,6 @@ if __name__ == "__main__":
     # dones = torch.zeros((args.num_steps, args.num_envs)).to(device)
     # values = torch.zeros((args.num_steps, args.num_envs)).to(device)
 
-    # obs = torch.zeros((args.num_steps, args.num_envs, 1)).to(device)
-    obs = []
-    actions = torch.zeros((args.num_steps, args.num_envs)).to(device)
-    logprobs = torch.zeros((args.num_steps, args.num_envs)).to(device)
-    rewards = torch.zeros((args.num_steps, args.num_envs)).to(device)
-    dones = torch.zeros((args.num_steps, args.num_envs)).to(device)
-    values = torch.zeros((args.num_steps, args.num_envs)).to(device)
-
     # TRY NOT TO MODIFY: start the game
     global_step = 0
     start_time = time.time()
@@ -391,6 +386,14 @@ if __name__ == "__main__":
     next_done = torch.zeros(args.num_envs).to(device)
 
     for iteration in range(1, args.num_iterations + 1):
+        # reset obs each iteration, as other variables do. otherwise OOM.
+        obs = []
+        actions = torch.zeros((args.num_steps, args.num_envs)).to(device)
+        logprobs = torch.zeros((args.num_steps, args.num_envs)).to(device)
+        rewards = torch.zeros((args.num_steps, args.num_envs)).to(device)
+        dones = torch.zeros((args.num_steps, args.num_envs)).to(device)
+        values = torch.zeros((args.num_steps, args.num_envs)).to(device)
+
         # Annealing the rate if instructed to do so.
         if args.anneal_lr:
             frac = 1.0 - (iteration - 1.0) / args.num_iterations
@@ -405,16 +408,30 @@ if __name__ == "__main__":
 
             # ALGO LOGIC: action logic
             with torch.no_grad():
-                try:
+                # try:
+
+                # handle accident or illegal situation
+                while True:
                     action, logprob, _, value = agent.get_action_and_value(next_obs)
-                except:
-                    print(action, logprob, value)
-                    pickle.dump(next_obs, open("./error_next_obs.pkl", "wb"))
-                    torch.save(torch.tensor(envs.history_rewards), "./error_history_rewards1.pt")
-                    torch.save(torch.tensor(envs.history_actions), "./error_history_actions1.pt")
-                    torch.save(agent.actor.state_dict(), "./error_actor1.pt")
-                    torch.save(agent.critic.state_dict(), "./error_critic1.pt")
-                    exit()
+
+                    alpha, beta, gamma, hetero_homo = envs.combinations[action % len(envs.combinations)]
+                    n_neighbors = int(alpha * envs.current_state["n_neighbors"])
+                    MN_ratio = beta * envs.current_state["MN_ratio"]
+                    FP_ratio = gamma * envs.current_state["FP_ratio"]
+
+                    if n_neighbors <= 0 or MN_ratio*n_neighbors < 1 or FP_ratio*n_neighbors < 1:
+                        continue
+                    else:
+                        break
+
+                # except:
+                #     print("error happened! ", action, logprob, value)
+                #     pickle.dump(next_obs, open("./error_next_obs.pkl", "wb"))
+                #     torch.save(torch.tensor(envs.history_rewards), "./error_history_rewards1.pt")
+                #     torch.save(torch.tensor(envs.history_actions), "./error_history_actions1.pt")
+                #     torch.save(agent.actor.state_dict(), "./error_actor1.pt")
+                #     torch.save(agent.critic.state_dict(), "./error_critic1.pt")
+                #     exit()
 
                 values[step] = value.flatten()
             actions[step] = action
@@ -427,7 +444,9 @@ if __name__ == "__main__":
             # next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(next_done).to(device)
             next_done = torch.tensor(next_done).to(device)
 
-            print(envs.history_len, envs.history_rewards, envs.history_actions, reward, next_done)
+            print("\nhistory_len:{}\nhistory_rewards:{}\nhistory_actions:{}\nreward:{}\nnext_done:{}".format(
+                envs.history_len, envs.history_rewards, envs.history_actions, reward.item(), 
+                next_done.detach().cpu().item()))
 
             if "final_info" in infos:
                 for info in infos["final_info"]:
