@@ -196,12 +196,12 @@ class DREnv(Env):
             plt.cla()
             draw_z(
                 z=normalise(z), 
-                cls=np.ones((z.shape[0], 1)), 
+                cls=self.label, #np.ones((z.shape[0], 1)), 
                 s=1, 
                 save_path=os.path.join(self.save_path, name), 
                 display=False, 
                 title=name, 
-                palette=None
+                palette='Spectral' # None
             )
             # features = np.zeros((5, 1))
             # print("Please refer to image {}.".format(os.path.join(self.save_path, name)))

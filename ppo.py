@@ -28,6 +28,11 @@ import pickle
 from copy import deepcopy
 from tqdm import tqdm
 
+import torchvision as tv
+import torchvision.transforms as transforms
+from torch.autograd import Variable
+from torchvision.utils import save_image
+
 @dataclass
 class Args:
     run_name: str = ""
@@ -53,7 +58,7 @@ class Args:
     # Algorithm specific arguments
     env_id: str = "DVHL" # "CartPole-v1"
     """the id of the environment"""
-    total_timesteps: int = 100 # 500000
+    total_timesteps: int = 120 # 500000
     """total timesteps of the experiments"""
     learning_rate: float = 2.5e-4
     """the learning rate of the optimizer"""
@@ -302,7 +307,7 @@ if __name__ == "__main__":
     args = tyro.cli(Args)
     args.batch_size = int(args.num_envs * args.num_steps)                   # 12
     args.minibatch_size = int(args.batch_size // args.num_minibatches)      # 4
-    args.num_iterations = args.total_timesteps // args.batch_size           # [100/12]=9
+    args.num_iterations = args.total_timesteps // args.batch_size           # [120/12]=10
     
     if args.run_name=="":
         run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{time.strftime('%m%d%H%M%S', time.localtime())}"
@@ -343,15 +348,29 @@ if __name__ == "__main__":
     # )
     # assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
     
-    data, labels = gauss_clusters(
-        n_clusters=20,
-        dim=50,
-        pts_cluster=1000,
-        stepsize=6,
-        random_state=None,
-    )
-    idx = np.random.choice(data.shape[0], 1000, replace=False)
+    # data generation
+
+    # 1. simulation
+    # data, labels = gauss_clusters(
+    #     n_clusters=20,
+    #     dim=50,
+    #     pts_cluster=1000,
+    #     stepsize=6,
+    #     random_state=None,
+    # )
+    # idx = np.random.choice(data.shape[0], 1000, replace=False)
+    # data, labels = data[idx], labels[idx]
+
+    # 2. MNIST
+    transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))])
+    trainset = tv.datasets.MNIST(root='./data',  train=True, download=False, transform=transform)
+    traindata = [i[0].unsqueeze(0) for i in trainset]
+    trainlabel = [i[1] for i in trainset]
+    data = torch.vstack(traindata).numpy().reshape(60000, 28*28)
+    labels = torch.tensor(trainlabel).numpy().reshape(60000, 1)
+    idx = np.random.choice(data.shape[0], 10000, replace=False)
     data, labels = data[idx], labels[idx]
+
     print("data: {}, labels: {}".format(data.shape, labels.shape))
     envs = DREnv(
         data.astype('float32'), 
@@ -363,7 +382,7 @@ if __name__ == "__main__":
         num_steps = args.num_steps
     )
 
-    agent = Agent(envs, num_node_features=50, hidden=16, num_actions=81).to(device)
+    agent = Agent(envs, num_node_features=data.shape[1], hidden=16, num_actions=81).to(device)
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
     print("actor params: {}".format(sum([p.numel() for p in agent.actor.parameters()])))
@@ -380,13 +399,16 @@ if __name__ == "__main__":
     # TRY NOT TO MODIFY: start the game
     global_step = 0
     start_time = time.time()
-    # next_obs, _ = envs.reset(seed=args.seed)
-    next_obs = envs.reset()
-    # next_obs = torch.Tensor(next_obs).to(device)
-    next_done = torch.zeros(args.num_envs).to(device)
+    
 
     for iteration in range(1, args.num_iterations + 1):
         # reset obs each iteration, as other variables do. otherwise OOM.
+        
+        # next_obs, _ = envs.reset(seed=args.seed)
+        next_obs = envs.reset()
+        # next_obs = torch.Tensor(next_obs).to(device)
+        next_done = torch.zeros(args.num_envs).to(device)
+
         obs = []
         actions = torch.zeros((args.num_steps, args.num_envs)).to(device)
         logprobs = torch.zeros((args.num_steps, args.num_envs)).to(device)
@@ -580,3 +602,5 @@ if __name__ == "__main__":
 
     envs.close()
     writer.close()
+
+    torch.save(agent.state_dict(), "runs/{}/agent.pt".format(run_name))
