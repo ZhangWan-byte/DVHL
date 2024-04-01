@@ -23,7 +23,8 @@ class BasicBlock(nn.Module):
             nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True),
             nn.Conv2d(out_channels, out_channels * BasicBlock.expansion, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(out_channels * BasicBlock.expansion)
+            nn.BatchNorm2d(out_channels * BasicBlock.expansion), 
+            nn.Dropout(p=0.5)
         )
 
         #shortcut
@@ -55,8 +56,9 @@ class BottleNeck(nn.Module):
             nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True),
             nn.Conv2d(out_channels, out_channels * BottleNeck.expansion, kernel_size=1, bias=False),
-            nn.BatchNorm2d(out_channels * BottleNeck.expansion),
-        )
+            nn.BatchNorm2d(out_channels * BottleNeck.expansion), 
+            nn.Dropout(p=0.5)
+            )
 
         self.shortcut = nn.Sequential()
 
@@ -122,6 +124,7 @@ class ResNet(nn.Module):
         output = self.conv5_x(output)
         output = self.avg_pool(output)
         output = output.view(output.size(0), -1)
+        output = F.dropout(output, p=0.7)
         output = self.fc(output)
 
         return output
