@@ -14,6 +14,37 @@ from myPaCMAP import *
 import itertools
 import time
 
+# human surrogate
+class SiameseNet(nn.Module):
+    def __init__(self, hidden, block, num_block, in_channels, out_channels=[10, 16, 32, 64], num_classes=16):
+        super().__init__()
+        self.cnn = ResNet(
+            block=BasicBlock, 
+            num_block=[1,1,1,1], 
+            num_classes=hidden, 
+            in_channels=1, 
+            out_channels=[10, 16, 24, 32])
+
+        self.hidden = hidden
+
+        self.mlp = nn.Sequential(
+            nn.Linear(self.hidden*2, self.hidden), 
+            nn.ReLU(), 
+            nn.Dropout(p=0.5), 
+            nn.Linear(self.hidden, 1)
+        )
+
+    def forward(self, x1, x2):
+        emb1 = self.cnn(x1)
+        emb2 = self.cnn(x2)
+
+        x = torch.hstack([emb1, emb2])
+        x = self.mlp(x)
+        x = F.sigmoid(x)
+
+        return x
+
+
 class DREnv(Env):
     def __init__(self, x, label, model_path="./exp1/model_CosAnneal1.pt", batch_size=1000, action_space=12, history_len=3, save_path=None, num_steps=12):
         self.x = x
@@ -28,7 +59,8 @@ class DREnv(Env):
 
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-        self.model = ResNet(
+        self.model = SiameseNet(
+            hidden=64, 
             block=BasicBlock, 
             num_block=[1,1,1,1], 
             num_classes=5, 
@@ -36,6 +68,7 @@ class DREnv(Env):
             out_channels=[10, 16, 24, 32]
         ).cuda()
         self.model.load_state_dict(torch.load(model_path))
+        self.model.train()
 
         # actions
         self.alpha_values = [0.8, 1.0, 1.2]                # value range of ratio of kNN
@@ -46,6 +79,10 @@ class DREnv(Env):
         self.combinations = list(
             itertools.product(self.alpha_values, self.beta_values, self.gamma_values, self.hetero_homo)
         )
+
+        # best & last vis
+        self.best_z = None
+        self.last_z = None
 
         # history_actions: +1 / 0 / -1
         # effect_history_actions: -1 / -2
@@ -214,24 +251,71 @@ class DREnv(Env):
             
             # feedback = features[-1]
 
+
+
+            # z = get_Ihat(normalise(z), size=100)
+            # z = torch.from_numpy(z).view(1,1,100,100).float().cuda()
+            # out = self.model(z).detach().cpu().view(-1)
+            # feedback = torch.argmax(out) + 1            # scores in {1,2,3,4,5}
+
+            # # r1: compared to last reward
+            # if len(self.history_feedbacks)==0 or feedback > self.history_feedbacks[-1]:
+            #     r1 = 1
+            # else:
+            #     r1 = 0
+
+            # # r2: compared to best reward
+            # r2 = feedback - self.best_feedback
+            # if r2>0:
+            #     self.best_feedback = feedback
+            
+            # print("feedback: {}, history_feedbacks: {}, r1: {}, r2: {}".format(feedback, self.history_feedbacks, r1, r2))
+            # self.history_feedbacks.append(feedback.item())
+
+            self.model.train()
+
             z = get_Ihat(normalise(z), size=100)
             z = torch.from_numpy(z).view(1,1,100,100).float().cuda()
-            out = self.model(z).detach().cpu().view(-1)
-            feedback = torch.argmax(out) + 1            # scores in {1,2,3,4,5}
-
-            # r1: compared to last reward
-            if len(self.history_feedbacks)==0 or feedback > self.history_feedbacks[-1]:
-                r1 = 1
-            else:
-                r1 = 0
-
-            # r2: compared to best reward
-            r2 = feedback - self.best_feedback
-            if r2>0:
-                self.best_feedback = feedback
             
-            print("feedback: {}, history_feedbacks: {}, r1: {}, r2: {}".format(feedback, self.history_feedbacks, r1, r2))
-            self.history_feedbacks.append(feedback.item())
+            # r1: compared to last vis
+            # rigorous reward: allow false negative, rejct false positive
+            out1 = []
+            for _ in range(10):
+                out = self.model(z, self.last_z).detach().cpu().item()
+                out1.append(out)
+            out1_mean = np.mean(out1)
+            out1_var = np.var(out1)
+
+            if out1_var<0.02:
+                r1 = out1_mean#.round()
+            else:
+                if out1_mean>0.5:
+                    r1 = max((out1_mean - torch.sqrt(out1_var)*3).item(), 0)
+                else:
+                    r2 = min((out1_mean + torch.sqrt(out1_var)*3).item(), 1)
+
+            # r2: compared to best vis
+            out2 = []
+            for _ in range(10):
+                out = self.model(z, self.best_z).detach().cpu().item()
+                out2.append(out)
+            out2_mean = np.mean(out2)
+            out2_var = np.var(out2)
+
+            if out2_var<0.02:
+                r2 = out2_mean#.round()
+            else:
+                if out2_mean>0.5:
+                    r2 = max((out2_mean - torch.sqrt(out2_var)*3).item(), 0)
+                else:
+                    r2 = min((out2_mean + torch.sqrt(out2_var)*3).item(), 1)
+
+            # update last and best vis
+            self.last_z = z
+            if r1+r2 > self.best_reward:
+                self.best_z = z
+
+            print("\nr1: {}, r2:{}\n".format(r1, r2))
 
             return r1 + r2
         
@@ -294,4 +378,20 @@ class DREnv(Env):
         self.step = 0
 
         self.current_state = self.obtain_state(self.x, self.label, self.batch_size, initial=True) # self.start
+        self.reducer = myPaCMAP(
+            n_components=2, 
+            n_neighbors=self.current_state["n_neighbors"], 
+            MN_ratio=self.current_state["MN_ratio"], 
+            FP_ratio=self.current_state["FP_ratio"], 
+            pair_neighbors=self.current_state["pair_neighbors"], 
+            pair_MN=self.current_state["pair_MN"], 
+            pair_FP=self.current_state["pair_FP"]
+        )
+        z = self.reducer.fit_transform(self.x)
+        z = get_Ihat(normalise(z), size=100)
+        z = torch.from_numpy(z).view(1,1,100,100).float().cuda()
+
+        self.last_z = z
+        self.best_z = z
+
         return self.current_state

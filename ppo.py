@@ -351,30 +351,31 @@ if __name__ == "__main__":
     # data generation
 
     # 1. simulation
-    # data, labels = gauss_clusters(
-    #     n_clusters=20,
-    #     dim=50,
-    #     pts_cluster=1000,
-    #     stepsize=6,
-    #     random_state=None,
-    # )
-    # idx = np.random.choice(data.shape[0], 1000, replace=False)
-    # data, labels = data[idx], labels[idx]
+    data, labels = gauss_clusters(
+        n_clusters=20,
+        dim=50,
+        pts_cluster=1000,
+        stepsize=6,
+        random_state=None,
+    )
+    idx = np.random.choice(data.shape[0], 1000, replace=False)
+    data, labels = data[idx], labels[idx]
 
     # 2. MNIST
-    transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))])
-    trainset = tv.datasets.MNIST(root='./data',  train=True, download=False, transform=transform)
-    traindata = [i[0].unsqueeze(0) for i in trainset]
-    trainlabel = [i[1] for i in trainset]
-    data = torch.vstack(traindata).numpy().reshape(60000, 28*28)
-    labels = torch.tensor(trainlabel).numpy().reshape(60000, 1)
-    idx = np.random.choice(data.shape[0], 10000, replace=False)
-    data, labels = data[idx], labels[idx]
+    # transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))])
+    # trainset = tv.datasets.MNIST(root='./data',  train=True, download=False, transform=transform)
+    # traindata = [i[0].unsqueeze(0) for i in trainset]
+    # trainlabel = [i[1] for i in trainset]
+    # data = torch.vstack(traindata).numpy().reshape(60000, 28*28)
+    # labels = torch.tensor(trainlabel).numpy().reshape(60000, 1)
+    # idx = np.random.choice(data.shape[0], 10000, replace=False)
+    # data, labels = data[idx], labels[idx]
 
     print("data: {}, labels: {}".format(data.shape, labels.shape))
     envs = DREnv(
         data.astype('float32'), 
         labels.astype('float32'), 
+        model_path="./exp1/model_dropout.pt", 
         batch_size=1000, 
         action_space=81, 
         history_len=3, 
