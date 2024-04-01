@@ -52,6 +52,7 @@ class DREnv(Env):
         self.batch_size = batch_size
         self.best_reward = 0
         self.best_feedback = 0
+        self.name = None
 
         self.count = 0
         self.current_state = None
@@ -68,6 +69,7 @@ class DREnv(Env):
             out_channels=[10, 16, 24, 32]
         ).cuda()
         self.model.load_state_dict(torch.load(model_path))
+        print(sum([p.numel() for p in self.model.parameters()]))
         self.model.train()
 
         # actions
@@ -112,8 +114,8 @@ class DREnv(Env):
         if initial==True:
 
             n_neighbors = None
-            MN_ratio = 0.5
-            FP_ratio = 2.0
+            MN_ratio = 10.0 #0.5
+            FP_ratio = 5.0 #2.0
 
         num_nodes = x.shape[0]
 
@@ -179,10 +181,6 @@ class DREnv(Env):
 
         # 2. obtain reward
         reward = self.obtain_reward(self.current_state)
-        
-        # update best reward
-        if reward > self.best_reward:
-            self.best_reward = reward
 
         # 3. obtain history
         # update history actions
@@ -190,7 +188,7 @@ class DREnv(Env):
         self.history_actions = self.history_actions[1:]
 
         # update history rewards
-        self.history_rewards.append(reward.item())
+        self.history_rewards.append(reward)
         self.history_rewards = self.history_rewards[1:]
 
         # add history info to state
@@ -289,10 +287,14 @@ class DREnv(Env):
             if out1_var<0.02:
                 r1 = out1_mean#.round()
             else:
+                # if out1_mean>0.5:
+                #     r1 = max((out1_mean - np.sqrt(out1_var)*3).item(), 0)
+                # else:
+                #     r1 = min((out1_mean + np.sqrt(out1_var)*3).item(), 1)
                 if out1_mean>0.5:
-                    r1 = max((out1_mean - torch.sqrt(out1_var)*3).item(), 0)
+                    r1 = max((out1_mean - np.sqrt(out1_var)*3).round().item(), 0)
                 else:
-                    r2 = min((out1_mean + torch.sqrt(out1_var)*3).item(), 1)
+                    r1 = min((out1_mean + np.sqrt(out1_var)*3).round().item(), 1)
 
             # r2: compared to best vis
             out2 = []
@@ -305,15 +307,21 @@ class DREnv(Env):
             if out2_var<0.02:
                 r2 = out2_mean#.round()
             else:
+                # if out2_mean>0.5:
+                #     r2 = max((out2_mean - np.sqrt(out2_var)*3).item(), 0)
+                # else:
+                #     r2 = min((out2_mean + np.sqrt(out2_var)*3).item(), 1)
                 if out2_mean>0.5:
-                    r2 = max((out2_mean - torch.sqrt(out2_var)*3).item(), 0)
+                    r2 = max((out2_mean - np.sqrt(out2_var)*3).round().item(), 0)
                 else:
-                    r2 = min((out2_mean + torch.sqrt(out2_var)*3).item(), 1)
+                    r2 = min((out2_mean + np.sqrt(out2_var)*3).round().item(), 1)
 
             # update last and best vis
             self.last_z = z
             if r1+r2 > self.best_reward:
                 self.best_z = z
+                self.best_name = name
+                self.best_reward = r1+r2
 
             print("\nr1: {}, r2:{}\n".format(r1, r2))
 

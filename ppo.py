@@ -400,7 +400,9 @@ if __name__ == "__main__":
     # TRY NOT TO MODIFY: start the game
     global_step = 0
     start_time = time.time()
-    
+
+    all_rewards = []
+    all_actions = []
 
     for iteration in range(1, args.num_iterations + 1):
         # reset obs each iteration, as other variables do. otherwise OOM.
@@ -468,8 +470,9 @@ if __name__ == "__main__":
             next_done = torch.tensor(next_done).to(device)
 
             print("\nhistory_len:{}\nhistory_rewards:{}\nhistory_actions:{}\nreward:{}\nnext_done:{}".format(
-                envs.history_len, envs.history_rewards, envs.history_actions, reward.item(), 
+                envs.history_len, envs.history_rewards, envs.history_actions, reward, 
                 next_done.detach().cpu().item()))
+            print("best: {}".format(envs.best_name))
 
             if "final_info" in infos:
                 for info in infos["final_info"]:
@@ -477,6 +480,9 @@ if __name__ == "__main__":
                         print(f"global_step={global_step}, episodic_return={info['episode']['r']}")
                         writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
                         writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)
+
+            all_rewards.append(reward)
+            all_actions.append(envs.history_actions[-1])
 
         # bootstrap value if not done
         with torch.no_grad():
@@ -605,3 +611,5 @@ if __name__ == "__main__":
     writer.close()
 
     torch.save(agent.state_dict(), "runs/{}/agent.pt".format(run_name))
+    torch.save(torch.tensor(all_rewards), "runs/{}/all_rewards.pt".format(run_name))
+    torch.save(torch.tensor(all_actions), "runs/{}/all_actions.pt".format(run_name))
