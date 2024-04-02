@@ -142,10 +142,10 @@ class DREnv(Env):
 
         # edge feats
         edge_attr = np.zeros((edge_index.shape[0], 4))
-        edge_attr[:pair_neighbors.shape[0], 0] = 1
-        edge_attr[pair_neighbors.shape[0]:pair_neighbors.shape[0]+pair_MN.shape[0], 1] = 1
-        edge_attr[pair_neighbors.shape[0]+pair_MN.shape[0]:pair_neighbors.shape[0]+pair_MN.shape[0]+pair_VN.shape[0], 2] = 1
-        edge_attr[pair_neighbors.shape[0]+pair_MN.shape[0]+pair_VN.shape[0]:, 3] = 1
+        edge_attr[:pair_neighbors.shape[0], 0] = 1                                                      # knn
+        edge_attr[pair_neighbors.shape[0]:pair_neighbors.shape[0]+pair_MN.shape[0], 1] = 1              # mid-pair
+        edge_attr[pair_neighbors.shape[0]+pair_MN.shape[0]:pair_neighbors.shape[0]+pair_MN.shape[0]+pair_FP.shape[0], 2] = 1    # FP
+        edge_attr[pair_neighbors.shape[0]+pair_MN.shape[0]+pair_FP.shape[0]:, 3] = 1                    # VN
 
         edge_index = edge_index.transpose()
         edge_index = edge_index[[1, 0]]         # message: src -> tgt
