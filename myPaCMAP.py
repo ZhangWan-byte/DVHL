@@ -105,39 +105,61 @@ def sample_FP(n_samples, maximum, reject_ind):
         result[i] = j
     return result
 
+@numba.njit("i4(i4[:])", parallel=True, nogil=True, cache=True)
+def mysum(arr):
+    return np.sum(arr)
 
-@numba.njit("i4[:,:](f4[:,:],f4[:,:],i4[:,:],i4)", parallel=True, nogil=True, cache=True)
+@numba.njit("i4[:,:](f4[:,:],f4[:,:],i4[:,:],i4[:])", parallel=True, nogil=True, cache=True)
 def sample_neighbors_pair(X, scaled_dist, nbrs, n_neighbors):
+    # n_neighbors is an numpy array in shape (n,), each entry indicates the number of neighbors to be preserved
     n = X.shape[0]
-    pair_neighbors = np.empty((n*n_neighbors, 2), dtype=np.int32)
+    # pair_neighbors = np.empty((n*n_neighbors, 2), dtype=np.int32)
+    pair_neighbors = np.empty((n_neighbors.sum(), 2), dtype=np.int32)
 
     for i in numba.prange(n):
         scaled_sort = np.argsort(scaled_dist[i])
-        for j in numba.prange(n_neighbors):
-            pair_neighbors[i*n_neighbors + j][0] = i
-            pair_neighbors[i*n_neighbors + j][1] = nbrs[i][scaled_sort[j]]
+        # print("1", i)
+        # for j in numba.prange(n_neighbors[i]):
+        for j in range(n_neighbors[i]):
+            # pair_neighbors[i*n_neighbors + j][0] = i
+            # pair_neighbors[i*n_neighbors + j][1] = nbrs[i][scaled_sort[j]]
+            pair_neighbors[mysum(n_neighbors[:i]) + j][0] = i
+            pair_neighbors[mysum(n_neighbors[:i]) + j][1] = nbrs[i][scaled_sort[j]]
+        # print("2", i)
+
+    # for i in range(n):
+    #     scaled_sort = np.argsort(scaled_dist[i])
+    #     for j in range(n_neighbors[i]):
+    #         pair_neighbors[mysum(n_neighbors[:i]) + j][0] = i
+    #         pair_neighbors[mysum(n_neighbors[:i]) + j][1] = nbrs[i][scaled_sort[j]]
+    #     print("2", i)
+        
     return pair_neighbors
 
 
-@numba.njit("i4[:,:](i4,f4[:,:],f4[:,:],i4[:,:],i4)", parallel=True, nogil=True, cache=True)
+@numba.njit("i4[:,:](i4,f4[:,:],f4[:,:],i4[:,:],i4[:])", parallel=True, nogil=True, cache=True)
 def sample_neighbors_pair_basis(n_basis, X, scaled_dist, nbrs, n_neighbors):
     '''Sample Nearest Neighbor pairs for additional data.'''
     n = X.shape[0]
-    pair_neighbors = np.empty((n*n_neighbors, 2), dtype=np.int32)
+    # pair_neighbors = np.empty((n*n_neighbors, 2), dtype=np.int32)
+    pair_neighbors = np.empty((n_neighbors.sum(), 2), dtype=np.int32)
 
     for i in numba.prange(n):
         scaled_sort = np.argsort(scaled_dist[i])
-        for j in numba.prange(n_neighbors):
-            pair_neighbors[i*n_neighbors + j][0] = n_basis + i
-            pair_neighbors[i*n_neighbors + j][1] = nbrs[i][scaled_sort[j]]
+        for j in numba.prange(n_neighbors[i]):
+            # pair_neighbors[i*n_neighbors + j][0] = i
+            # pair_neighbors[i*n_neighbors + j][1] = nbrs[i][scaled_sort[j]]
+            pair_neighbors[n_neighbors[:i].sum() + j][0] = i
+            pair_neighbors[n_neighbors[:i].sum() + j][1] = nbrs[i][scaled_sort[j]]
     return pair_neighbors
 
 
-@numba.njit("i4[:,:](f4[:,:],i4,i4,i4)", nogil=True, cache=True)
+@numba.njit("i4[:,:](f4[:,:],i4[:],i4,i4)", nogil=True, cache=True)
 def sample_MN_pair(X, n_MN, option=0, mode=0):
     '''Sample Mid Near pairs.'''
     n = X.shape[0]
-    pair_MN = np.empty((n*n_MN, 2), dtype=np.int32)
+    # pair_MN = np.empty((n*n_MN, 2), dtype=np.int32)
+    pair_MN = np.empty((n_MN.sum(), 2), dtype=np.int32)
     
     if mode==0:
         # get second nearest out of six
@@ -153,7 +175,7 @@ def sample_MN_pair(X, n_MN, option=0, mode=0):
         num_delete = 1
     
     for i in numba.prange(n):
-        for jj in range(n_MN):
+        for jj in range(n_MN[i]):
             sampled = np.random.randint(0, n, 6)
             dist_list = np.empty((6), dtype=np.float32)
             for t in range(sampled.shape[0]):
@@ -167,20 +189,24 @@ def sample_MN_pair(X, n_MN, option=0, mode=0):
             sampled = np.delete(sampled, min_dic)
             
             picked = sampled[np.argmin(dist_list)]
-            pair_MN[i*n_MN + jj][0] = i
-            pair_MN[i*n_MN + jj][1] = picked
+            # pair_MN[i*n_MN + jj][0] = i
+            # pair_MN[i*n_MN + jj][1] = picked
+            pair_MN[n_MN[:i].sum() + jj][0] = i
+            pair_MN[n_MN[:i].sum() + jj][1] = picked
     return pair_MN
 
 
-@numba.njit("i4[:,:](f4[:,:],i4,i4,i4,i4)", nogil=True, cache=True)
+@numba.njit("i4[:,:](f4[:,:],i4[:],i4,i4,i4)", nogil=True, cache=True)
 def sample_MN_pair_deterministic(X, n_MN, random_state, option=0, mode=0):
     '''Sample Mid Near pairs using the given random state.'''
     n = X.shape[0]
-    pair_MN = np.empty((n*n_MN, 2), dtype=np.int32)
+    # pair_MN = np.empty((n*n_MN, 2), dtype=np.int32)
+    pair_MN = np.empty((n_MN.sum(), 2), dtype=np.int32)
+
     for i in numba.prange(n):
-        for jj in range(n_MN):
+        for jj in range(n_MN[i]):
             # Shifting the seed to prevent sampling the same pairs
-            np.random.seed(random_state + i * n_MN + jj)
+            np.random.seed(random_state + i * n_MN[i] + jj)
             sampled = np.random.randint(0, n, 6)
             dist_list = np.empty((6), dtype=np.float32)
             for t in range(sampled.shape[0]):
@@ -190,37 +216,51 @@ def sample_MN_pair_deterministic(X, n_MN, random_state, option=0, mode=0):
             dist_list = np.delete(dist_list, [min_dic])
             sampled = np.delete(sampled, [min_dic])
             picked = sampled[np.argmin(dist_list)]
-            pair_MN[i*n_MN + jj][0] = i
-            pair_MN[i*n_MN + jj][1] = picked
+            # pair_MN[i*n_MN + jj][0] = i
+            # pair_MN[i*n_MN + jj][1] = picked
+            pair_MN[n_MN[:i].sum() + jj][0] = i
+            pair_MN[n_MN[:i].sum() + jj][1] = picked
     return pair_MN
 
 
-@numba.njit("i4[:,:](f4[:,:],i4[:,:],i4,i4,i4)", parallel=True, nogil=True, cache=True)
+@numba.njit("i4[:,:](f4[:,:],i4[:,:],i4[:],i4[:],i4)", parallel=True, nogil=True, cache=True)
 def sample_FP_pair(X, pair_neighbors, n_neighbors, n_FP, mode=0):
     '''Sample Further pairs.'''
     n = X.shape[0]
-    pair_FP = np.empty((n * n_FP, 2), dtype=np.int32)
+    # pair_FP = np.empty((n * n_FP, 2), dtype=np.int32)
+    pair_FP = np.empty((n_FP.sum(), 2), dtype=np.int32)
+
     for i in numba.prange(n):
-        for k in numba.prange(n_FP):
+        for k in numba.prange(n_FP[i]):
+            # FP_index = sample_FP(
+            #     n_FP[i], n, pair_neighbors[i*n_neighbors: i*n_neighbors + n_neighbors][1])
             FP_index = sample_FP(
-                n_FP, n, pair_neighbors[i*n_neighbors: i*n_neighbors + n_neighbors][1])
-            pair_FP[i*n_FP + k][0] = i
-            pair_FP[i*n_FP + k][1] = FP_index[k]
+                n_FP[i], n, pair_neighbors[n_neighbors[:i].sum(): n_neighbors[:i+1].sum()][1])
+            # pair_FP[i*n_FP + k][0] = i
+            # pair_FP[i*n_FP + k][1] = FP_index[k]
+            pair_FP[n_FP[:i].sum() + k][0] = i
+            pair_FP[n_FP[:i].sum() + k][1] = FP_index[k]
     return pair_FP
 
 
-@numba.njit("i4[:,:](f4[:,:],i4[:,:],i4,i4,i4,i4)", parallel=True, nogil=True, cache=True)
+@numba.njit("i4[:,:](f4[:,:],i4[:,:],i4[:],i4[:],i4,i4)", parallel=True, nogil=True, cache=True)
 def sample_FP_pair_deterministic(X, pair_neighbors, n_neighbors, n_FP, random_state, mode=0):
     '''Sample Further pairs using the given random state.'''
     n = X.shape[0]
-    pair_FP = np.empty((n * n_FP, 2), dtype=np.int32)
+    # pair_FP = np.empty((n * n_FP, 2), dtype=np.int32)
+    pair_FP = np.empty((n_FP.sum(), 2), dtype=np.int32)
+
     for i in numba.prange(n):
-        for k in numba.prange(n_FP):
-            np.random.seed(random_state+i*n_FP+k)
+        for k in numba.prange(n_FP[i]):
+            np.random.seed(random_state+i*n_FP[i]+k)
+            # FP_index = sample_FP(
+            #     n_FP, n, pair_neighbors[i*n_neighbors: i*n_neighbors + n_neighbors][1])
             FP_index = sample_FP(
-                n_FP, n, pair_neighbors[i*n_neighbors: i*n_neighbors + n_neighbors][1])
-            pair_FP[i*n_FP + k][0] = i
-            pair_FP[i*n_FP + k][1] = FP_index[k]
+                n_FP[i], n, pair_neighbors[n_neighbors[:i].sum(): n_neighbors[:i+1].sum()][1])
+            # pair_FP[i*n_FP + k][0] = i
+            # pair_FP[i*n_FP + k][1] = FP_index[k]
+            pair_FP[n_FP[:i].sum() + k][0] = i
+            pair_FP[n_FP[:i].sum() + k][1] = FP_index[k]
     return pair_FP
 
 
@@ -474,7 +514,9 @@ def generate_pair(
     '''
     n, dim = X.shape
     # sample more neighbors than needed
-    n_neighbors_extra = min(n_neighbors + 50, n - 1)
+    # n_neighbors_extra = min(n_neighbors + 50, n - 1)
+    n_neighbors_extra = np.array(list(map(lambda x:min(x+50, n-1), n_neighbors)), dtype=np.int32)
+
     tree = AnnoyIndex(dim, metric=distance)
     if _RANDOM_STATE is not None:
         tree.set_seed(_RANDOM_STATE)
@@ -484,13 +526,13 @@ def generate_pair(
 
     option = distance_to_option(distance=distance)
 
-    nbrs = np.zeros((n, n_neighbors_extra), dtype=np.int32)
-    knn_distances = np.empty((n, n_neighbors_extra), dtype=np.float32)
-
+    nbrs = np.zeros((n, np.max(n_neighbors_extra)), dtype=np.int32)
+    knn_distances = np.empty((n, np.max(n_neighbors_extra)), dtype=np.float32)
+    
     for i in range(n):
-        nbrs_ = tree.get_nns_by_item(i, n_neighbors_extra + 1)
+        nbrs_ = tree.get_nns_by_item(i, np.max(n_neighbors_extra) + 1)
         nbrs[i, :] = nbrs_[1:]
-        for j in range(n_neighbors_extra):
+        for j in range(n_neighbors_extra[i]):
             knn_distances[i, j] = tree.get_distance(i, nbrs[i, j])
     print_verbose("Found nearest neighbor", verbose)
     sig = np.maximum(np.mean(knn_distances[:, 3:6], axis=1), 1e-10)
@@ -498,6 +540,7 @@ def generate_pair(
     scaled_dist = scale_dist(knn_distances, sig, nbrs)
     print_verbose("Found scaled dist", verbose)
     pair_neighbors = sample_neighbors_pair(X, scaled_dist, nbrs, n_neighbors)
+    print_verbose("Obtained pair neighbors", verbose)
     if _RANDOM_STATE is None:
         pair_MN = sample_MN_pair(X, n_MN, option, mode)
         pair_FP = sample_FP_pair(X, pair_neighbors, n_neighbors, n_FP, mode)
@@ -874,17 +917,20 @@ class myPaCMAP(BaseEstimator):
             if n <= 10000:
                 self.n_neighbors = 10
             else:
-                self.n_neighbors = int(round(10 + 15 * (np.log10(n) - 4)))
-        self.n_MN = int(round(self.n_neighbors * self.MN_ratio))
-        self.n_FP = int(round(self.n_neighbors * self.FP_ratio))
-        if self.n_neighbors < 1:
+                # self.n_neighbors = int(round(10 + 15 * (np.log10(n) - 4)))
+                self.n_neighbors = np.array([int(round(10 + 15 * (np.log10(n) - 4)))]*n)
+        # self.n_MN = int(round(self.n_neighbors * self.MN_ratio))
+        # self.n_FP = int(round(self.n_neighbors * self.FP_ratio))
+        self.n_MN = np.round(self.n_neighbors * self.MN_ratio).astype(int)
+        self.n_FP = np.round(self.n_neighbors * self.FP_ratio).astype(int)
+        if min(self.n_neighbors) < 1:
             raise ValueError(
                 "The number of nearest neighbors can't be less than 1")
-        if self.n_FP < 1:
+        if min(self.n_FP) < 1:
             raise ValueError(
                 "The number of further points can't be less than 1")
 
-    def fit(self, X, init=None, save_pairs=True):
+    def fit(self, X, n_neighbors=None, n_MN=None, n_FP=None, init=None, save_pairs=True):
         '''Projects a high dimensional dataset into a low-dimensional embedding, without returning the output.
 
         Parameters
@@ -892,6 +938,15 @@ class myPaCMAP(BaseEstimator):
         X: numpy.ndarray
             The high-dimensional dataset that is being projected. 
             An embedding will get created based on parameters of the PaCMAP instance.
+
+        n_neighbors: numpy.ndarray
+            List of neighbor numbers for each node to be preserved.
+        
+        n_MN: numpy.ndarray
+            List of mid-pair neighbor numbers for each node to be preserved.
+
+        n_FP: numpy.ndarray
+            List of negative neighbor numbers for each node.
 
         init: str, optional
             One of ['pca', 'random']. Initialization of the embedding, default='pca'.
@@ -903,6 +958,7 @@ class myPaCMAP(BaseEstimator):
         '''
 
         X = np.copy(X).astype(np.float32)
+
         # Preprocess the dataset
         n, dim = X.shape
         if n <= 0:
@@ -911,8 +967,16 @@ class myPaCMAP(BaseEstimator):
             X, self.distance, self.apply_pca, self.verbose, self.random_state, dim, self.n_components)
         self.tsvd_transformer = tsvd
         self.pca_solution = pca_solution
+        
         # Deciding the number of pairs
         self.decide_num_pairs(n)
+        if n_neighbors is not None:
+            self.n_neighbors = n_neighbors
+        if n_MN is not None:
+            self.n_MN = n_MN
+        if n_FP is not None:
+            self.n_FP = n_FP
+
         print_verbose(
             "PaCMAP(n_neighbors={}, n_MN={}, n_FP={}, distance={}, "
             "lr={}, n_iters={}, apply_pca={}, opt_method='adam', "
@@ -953,7 +1017,7 @@ class myPaCMAP(BaseEstimator):
             self.del_pairs()
         return self
 
-    def fit_transform(self, X, init=None, save_pairs=True):
+    def fit_transform(self, X, n_neighbors=None, n_MN=None, n_FP=None, init=None, save_pairs=True):
         '''Projects a high dimensional dataset into a low-dimensional embedding and return the embedding.
 
         Parameters
@@ -971,7 +1035,14 @@ class myPaCMAP(BaseEstimator):
             Whether to save the pairs that are sampled from the dataset. Useful for reproducing results.
         '''
 
-        self.fit(X, init, save_pairs)
+        if n_neighbors is not None:
+            self.n_neighbors = n_neighbors
+        if n_MN is not None:
+            self.n_MN = n_MN
+        if n_FP is not None:
+            self.n_FP = n_FP
+
+        self.fit(X, n_neighbors, n_MN, n_FP, init, save_pairs)
         if self.intermediate:
             return self.intermediate_states
         else:
