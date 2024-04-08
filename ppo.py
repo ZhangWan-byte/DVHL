@@ -27,6 +27,7 @@ warnings.filterwarnings('ignore')
 import pickle
 from copy import deepcopy
 from tqdm import tqdm
+from sklearn.cluster import KMeans
 
 import torchvision as tv
 import torchvision.transforms as transforms
@@ -72,7 +73,7 @@ class Args:
     """the discount factor gamma"""
     gae_lambda: float = 0.95
     """the lambda for the general advantage estimation"""
-    num_minibatches: int = 2 # 4
+    num_minibatches: int = 4
     """the number of mini-batches"""
     update_epochs: int = 4
     """the K epochs to update the policy"""
@@ -98,19 +99,6 @@ class Args:
     """the mini-batch size (computed in runtime)"""
     num_iterations: int = 0
     """the number of iterations (computed in runtime)"""
-
-
-def make_env(env_id, idx, capture_video, run_name):
-    def thunk():
-        if capture_video and idx == 0:
-            env = gym.make(env_id, render_mode="rgb_array")
-            env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
-        else:
-            env = gym.make(env_id)
-        env = gym.wrappers.RecordEpisodeStatistics(env)
-        return env
-
-    return thunk
 
 
 def gauss_clusters(
@@ -175,111 +163,123 @@ def get_scaledKNN(X, _RANDOM_STATE=None):
     return scaled_dist
 
 class GAT(torch.nn.Module):
-    def __init__(self, num_node_features=50, hidden=32, num_actions=81, out_dim=1, std=1.0, device=torch.device('cpu')):
+    def __init__(self, num_node_features=50, hidden=32, num_actions=27, out_dim=1, std=1.0, history_len=7, num_partition=20, device=torch.device('cuda' if torch.cuda.is_available() else 'cpu')):
         super().__init__()
         self.hidden = hidden
         self.num_actions = num_actions
         self.device = device
         self.edge_dim = 4
+        self.num_partition = num_partition
         self.out_dim = out_dim
 
         self.conv1 = GATv2Conv(num_node_features, hidden, edge_dim=self.edge_dim)
         self.conv2 = GATv2Conv(hidden, hidden, edge_dim=self.edge_dim)
+        self.conv3 = GATv2Conv(hidden, hidden, edge_dim=self.edge_dim)
         
         # graph feature
-        self.pooling = MultiheadAttention(embed_dim=hidden, num_heads=2)        
-        self.mlp = nn.Sequential(
-            layer_init(nn.Linear(in_features=hidden, out_features=hidden)),
-            nn.LeakyReLU(),
-            layer_init(nn.Linear(in_features=hidden, out_features=hidden)),
-            nn.LeakyReLU()
-        )
+        self.pooling = MultiheadAttention(embed_dim=hidden, num_heads=4)
 
         # history feature
-        self.gru = nn.GRU(input_size=num_actions+2, hidden_size=hidden, num_layers=1)
+        # self.gru = nn.GRU(input_size=num_actions+2, hidden_size=hidden, num_layers=1)
+        self.history_mlp = nn.Sequential(
+            layer_init(nn.Linear(in_features=history_len*num_partition+1, out_features=hidden)),
+            nn.LeakyReLU(),
+            nn.Dropout(p=0.5), 
+            layer_init(nn.Linear(in_features=hidden, out_features=hidden), std=std),
+            nn.LeakyReLU(), 
+            nn.Dropout(p=0.5), 
+            layer_init(nn.Linear(in_features=hidden, out_features=hidden), std=std),
+        )
 
         # prediction head
         self.head = nn.Sequential(
-            layer_init(nn.Linear(in_features=hidden*(1+self.edge_dim), out_features=hidden)), 
-            nn.LeakyReLU(),
-            layer_init(nn.Linear(in_features=hidden, out_features=self.out_dim), std=std)
+            layer_init(nn.Linear(in_features=hidden*(num_partition+1), out_features=hidden)), 
+            nn.LeakyReLU(), 
+            nn.Dropout(p=0.5), 
+            layer_init(nn.Linear(in_features=hidden, out_features=hidden), std=std), 
+            nn.LeakyReLU(), 
+            nn.Dropout(p=0.5), 
+            layer_init(nn.Linear(in_features=hidden, out_features=num_partition*self.out_dim), std=std)
         )
 
-    def forward(self, state):
+    def forward(self, state, partition=None):
 
-        x, edge_index, edge_attr, history = state["x"].float(), state["edge_index"].long(), state["edge_attr"].float(), state["history"].float()
+        x, edge_index, edge_attr = state["x"].float(), state["edge_index"].long(), state["edge_attr"].float()
 
         n, f = x.shape[0], self.hidden
 
-        # Conv layers
+        # Graph features
         x = self.conv1(x, edge_index, edge_attr)
         x = F.relu(x)
         x = F.dropout(x, training=self.training)
-        x = self.conv2(x, edge_index, edge_attr)
 
-        # Readout layer
-        x, _ = self.pooling(x, x, x)
-        # x = x.sum(dim=0)
-        x, _ = torch.max(x, dim=0)
-        x = self.mlp(x.view(1,-1)).view(1,-1)
+        x = self.conv2(x, edge_index, edge_attr)
+        x = F.relu(x)
+        x = F.dropout(x, training=self.training)
+        
+        x = self.conv3(x, edge_index, edge_attr)
+
+        x = self.cluster_means(x[:-1, :], partition)                                        # (num_partition, hidden)
 
         # History features
-        out, _ = self.gru(history)
-        # out = out.max(dim=0).view(1,-1)
-        out = out.flatten().view(1, -1)
+        history_actions, effect_history_actions = state["history"]
+        history = torch.cat([history_actions.flatten(), effect_history_actions], dim=0)     # (history_len*num_partition+1, )
+        out = self.history_mlp(history).view(1, -1)                                         # (1, hidden)
 
         # Prediction head
-        out = torch.cat([x, out], dim=1)
-        out = self.head(out)
+        out = torch.cat([x, out], dim=0)                                                    # (num_partition+1, hidden)
+        out = self.head(out.flatten())                                                      # (1, num_partition*out_dim)
+        out = out.view(self.num_partition, self.out_dim)
 
         return out
 
+    def cluster_means(self, x, partition):
+        unique_clusters, cluster_counts = torch.unique(partition, return_counts=True)
+        cluster_means = torch.zeros(len(unique_clusters), x.shape[1]).to(self.device)
+        cluster_means.index_add_(0, partition.squeeze(), x)
+        cluster_means /= cluster_counts.unsqueeze(1)
+
+        return cluster_means
 
 
 class Agent(nn.Module):
-    def __init__(self, envs, num_node_features=50, hidden=64, num_actions=81):
+    def __init__(self, envs, num_node_features=50, hidden=64, history_len=7, num_actions=27, num_partition=None):
         super().__init__()
-        # self.critic = nn.Sequential(
-        #     layer_init(nn.Linear(np.array(envs.single_observation_space.shape).prod(), 64)),
-        #     nn.Tanh(),
-        #     layer_init(nn.Linear(64, 64)),
-        #     nn.Tanh(),
-        #     layer_init(nn.Linear(64, 1), std=1.0),
-        # )
-        # self.actor = nn.Sequential(
-        #     layer_init(nn.Linear(np.array(envs.single_observation_space.shape).prod(), 64)),
-        #     nn.Tanh(),
-        #     layer_init(nn.Linear(64, 64)),
-        #     nn.Tanh(),
-        #     layer_init(nn.Linear(64, envs.single_action_space.n), std=0.01),
-        # )
 
-        self.critic = GAT(num_node_features, hidden, num_actions=num_actions, out_dim=1, std=1.0)
-        self.actor = GAT(num_node_features, hidden, num_actions=num_actions, out_dim=num_actions, std=0.01)
+        self.critic = GAT(
+            num_node_features, 
+            hidden, 
+            num_actions=num_actions, 
+            out_dim=1, 
+            std=1.0, 
+            history_len=history_len, 
+            num_partition=num_partition
+        )
+        self.actor = GAT(
+            num_node_features, 
+            hidden, 
+            num_actions=num_actions, 
+            out_dim=num_actions, 
+            std=0.01, 
+            history_len=history_len, 
+            num_partition=num_partition
+        )
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    def get_value(self, state):
-        # for key, value in state.items():
-        #     state[key] = state[key].to(self.device)
+    def get_value(self, state, partition=None):
 
-        return self.critic(state)
+        return self.critic(state, partition)
 
-    def get_action_and_value(self, state, action=None):
-        # for key, value in state.items():
-        #     try:
-        #         state[key] = state[key].to(self.device)
-        #     except:
-        #         pass
+    def get_action_and_value(self, state, action=None, partition=None):
 
         if type(state)==type([]):
-            # print(len(state))
             ac = []
             pbs = []
             ent = []
             value = []
 
             for i in range(len(state)):
-                logits = self.actor(state[i])
+                logits = self.actor(state[i], partition)
                 probs = Categorical(logits=logits)
                 if action is None:
                     action = probs.sample()
@@ -287,20 +287,38 @@ class Agent(nn.Module):
                 ac.append(action)
                 pbs.append(probs.log_prob(action))
                 ent.append(probs.entropy())
-                value.append(self.critic(state[i]))
+                value.append(self.critic(state[i]), partition)
             ac = torch.vstack(ac)
             pbs = torch.vstack(pbs)
             ent = torch.vstack(ent)
             value = torch.vstack(value)
-            # print(ac, pbs, ent, value)
+
             return ac, pbs, ent, value
         else:
-            logits = self.actor(state)
+            logits = self.actor(state, partition)
             probs = Categorical(logits=logits)
             if action is None:
                 action = probs.sample()
             
-            return action, probs.log_prob(action), probs.entropy(), self.critic(state)
+            return action, probs.log_prob(action), probs.entropy(), self.critic(state, partition)
+
+
+def get_partition(data, k=20, labels=None):
+    if labels==None:
+        kms = KMeans(n_clusters=k).fit(data)
+        kms_labels = kms.labels_
+
+        mean_var = np.array([[i.mean(), i.var()] for i in kms.cluster_centers_])
+        ind = np.lexsort((mean_var[:, 1], mean_var[:, 0]))
+        label_trans = {key: value for key, value in list(zip(np.arange(20), ind))}
+
+        invariant_partition = torch.tensor([label_trans[i] for i in kms_labels])
+
+        return invariant_partition
+
+    else:
+        print("not implemented in `get_partition`")
+        exit()
 
 
 if __name__ == "__main__":
@@ -310,10 +328,9 @@ if __name__ == "__main__":
     args.num_iterations = args.total_timesteps // args.batch_size           # [120/12]=10
     
     if args.run_name=="":
-        run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{time.strftime('%m%d%H%M%S', time.localtime())}"
+        run_name = f"{args.env_id}__{args.exp_name}__{time.strftime('%m%d%H%M%S', time.localtime())}__{args.seed}"
     else:
         run_name = args.run_name
-    # run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{time.strftime('%m%d%H%M%S', time.localtime())}"
 
     if args.track:
         import wandb
@@ -342,12 +359,6 @@ if __name__ == "__main__":
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
-    # env setup
-    # envs = gym.vector.SyncVectorEnv(
-    #     [make_env(args.env_id, i, args.capture_video, run_name) for i in range(args.num_envs)],
-    # )
-    # assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
-    
     # data generation
 
     # 1. simulation
@@ -360,6 +371,9 @@ if __name__ == "__main__":
     )
     idx = np.random.choice(data.shape[0], 1000, replace=False)
     data, labels = data[idx], labels[idx]
+
+    num_partition = len(np.unique(labels))
+    partition = get_partition(data, k=num_partition, labels=None).to(device)           # (data.shape[0], ) -- each entry is a cluster
 
     # 2. MNIST
     # transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))])
@@ -375,15 +389,15 @@ if __name__ == "__main__":
     envs = DREnv(
         data.astype('float32'), 
         labels.astype('float32'), 
-        model_path="./exp1/model_dropout.pt", 
-        batch_size=1000, 
-        action_space=81, 
-        history_len=3, 
+        model_path="./exp1/model_dropout.pt",  
+        action_space=27, 
+        history_len=7, 
         save_path=f"runs/{run_name}", 
-        num_steps = args.num_steps
+        num_steps = args.num_steps, 
+        num_partition=num_partition
     )
 
-    agent = Agent(envs, num_node_features=data.shape[1], hidden=16, num_actions=81).to(device)
+    agent = Agent(envs, num_node_features=data.shape[1], hidden=32, history_len=7, num_actions=27, num_partition=num_partition).to(device)
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
     print("actor params: {}".format(sum([p.numel() for p in agent.actor.parameters()])))
@@ -413,11 +427,11 @@ if __name__ == "__main__":
         next_done = torch.zeros(args.num_envs).to(device)
 
         obs = []
-        actions = torch.zeros((args.num_steps, args.num_envs)).to(device)
-        logprobs = torch.zeros((args.num_steps, args.num_envs)).to(device)
+        actions = torch.zeros((args.num_steps, num_partition, args.num_envs)).to(device)
+        logprobs = torch.zeros((args.num_steps, num_partition, args.num_envs)).to(device)
+        values = torch.zeros((args.num_steps, num_partition, args.num_envs)).to(device)
         rewards = torch.zeros((args.num_steps, args.num_envs)).to(device)
         dones = torch.zeros((args.num_steps, args.num_envs)).to(device)
-        values = torch.zeros((args.num_steps, args.num_envs)).to(device)
 
         # Annealing the rate if instructed to do so.
         if args.anneal_lr:
@@ -437,33 +451,34 @@ if __name__ == "__main__":
 
                 # handle accident or illegal situation
                 while True:
-                    action, logprob, _, value = agent.get_action_and_value(next_obs)
+                    action, logprob, _, value = agent.get_action_and_value(next_obs, partition=partition)
+                    hp = envs.combinations[action.cpu() % len(envs.combinations)]
+                    alpha, beta, gamma = hp[:, 0], hp[:, 1], hp[:, 2]
 
-                    alpha, beta, gamma, hetero_homo = envs.combinations[action % len(envs.combinations)]
-                    n_neighbors = int(alpha * envs.current_state["n_neighbors"])
+                    alpha = {k:alpha[k] for k in range(len(alpha))}
+                    alpha = [alpha[i.item()] for i in partition]
+
+                    beta = {k:alpha[k] for k in range(len(beta))}
+                    beta = [beta[i.item()] for i in partition]
+
+                    gamma = {k:alpha[k] for k in range(len(gamma))}
+                    gamma = [gamma[i.item()] for i in partition]
+
+                    n_neighbors = np.round(alpha * envs.current_state["n_neighbors"]).astype(np.int32)
                     MN_ratio = beta * envs.current_state["MN_ratio"]
                     FP_ratio = gamma * envs.current_state["FP_ratio"]
 
-                    if n_neighbors <= 0 or MN_ratio*n_neighbors < 1 or FP_ratio*n_neighbors < 1:
-                        continue
+                    if np.any(n_neighbors) <= 0 or np.any(MN_ratio*n_neighbors) < 1 or np.any(FP_ratio*n_neighbors) < 1:
+                        continue         
                     else:
                         break
 
-                # except:
-                #     print("error happened! ", action, logprob, value)
-                #     pickle.dump(next_obs, open("./error_next_obs.pkl", "wb"))
-                #     torch.save(torch.tensor(envs.history_rewards), "./error_history_rewards1.pt")
-                #     torch.save(torch.tensor(envs.history_actions), "./error_history_actions1.pt")
-                #     torch.save(agent.actor.state_dict(), "./error_actor1.pt")
-                #     torch.save(agent.critic.state_dict(), "./error_critic1.pt")
-                #     exit()
-
-                values[step] = value.flatten()
-            actions[step] = action
-            logprobs[step] = logprob
+                values[step] = value.flatten().view(-1,1)
+            actions[step] = action.view(-1,1)
+            logprobs[step] = logprob.view(-1,1)
 
             # TRY NOT TO MODIFY: execute the game and log data.
-            next_obs, reward, terminations, truncations, infos = envs.next_step(action.cpu().numpy().item(), iteration, step)
+            next_obs, reward, terminations, truncations, infos = envs.next_step(action.cpu(), iteration, step, partition)
             # next_done = np.logical_or(terminations, truncations)
             rewards[step] = torch.tensor(reward).to(device).view(-1)
             # next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(next_done).to(device)
@@ -486,7 +501,7 @@ if __name__ == "__main__":
 
         # bootstrap value if not done
         with torch.no_grad():
-            next_value = agent.get_value(next_obs).reshape(1, -1)
+            next_value = agent.get_value(next_obs, partition).reshape(1, -1)
             advantages = torch.zeros_like(rewards).to(device)
             lastgaelam = 0
             for t in reversed(range(args.num_steps)):
@@ -536,7 +551,7 @@ if __name__ == "__main__":
                 # print(b_obs_i, b_actions_i)
                 # print(mb_inds)
                 try:
-                    _, newlogprob, entropy, newvalue = agent.get_action_and_value(b_obs_i, b_actions_i)
+                    _, newlogprob, entropy, newvalue = agent.get_action_and_value(b_obs_i, b_actions_i, partition=partition)
                 except:
                     print(newlogprob, entropy, newvalue)
                     pickle.dump(b_obs_i, open("./error_b_obs_i.pkl", "wb"))

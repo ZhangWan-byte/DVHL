@@ -119,8 +119,8 @@ def sample_neighbors_pair(X, scaled_dist, nbrs, n_neighbors):
     for i in numba.prange(n):
         scaled_sort = np.argsort(scaled_dist[i])
         # print("1", i)
-        # for j in numba.prange(n_neighbors[i]):
-        for j in range(n_neighbors[i]):
+        for j in numba.prange(n_neighbors[i]):
+        # for j in range(n_neighbors[i]):
             # pair_neighbors[i*n_neighbors + j][0] = i
             # pair_neighbors[i*n_neighbors + j][1] = nbrs[i][scaled_sort[j]]
             pair_neighbors[mysum(n_neighbors[:i]) + j][0] = i
