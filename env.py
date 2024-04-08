@@ -112,8 +112,8 @@ class DREnv(Env):
         if initial==True:
 
             n_neighbors = None
-            MN_ratio = np.ones(x.shape[0]) * 0.5
-            FP_ratio = np.ones(x.shape[0]) * 2.0
+            MN_ratio = np.ones(x.shape[0]) * 1.0 # 0.5
+            FP_ratio = np.ones(x.shape[0]) * 10.0 # 2.0
 
         num_nodes = x.shape[0]
 
@@ -186,7 +186,7 @@ class DREnv(Env):
             print("\n\n{} fit-transforming...".format(name))
 
             t1 = time.time()
-            z = self.reducer.fit_transform(
+            z0 = self.reducer.fit_transform(
                 self.x, 
                 n_neighbors=state["n_neighbors"], 
                 n_MN=np.round(state["MN_ratio"] * state["n_neighbors"]).astype(np.int32), 
@@ -229,7 +229,7 @@ class DREnv(Env):
 
             self.model.train()
 
-            z = get_Ihat(normalise(z), size=100)
+            z = get_Ihat(normalise(z0), size=100)
             z = torch.from_numpy(z).view(1,1,100,100).float().cuda()
             
             # r1: compared to last vis
@@ -284,7 +284,7 @@ class DREnv(Env):
 
             plt.cla()
             draw_z(
-                z=normalise(z), 
+                z=normalise(z0), 
                 cls=self.label, #np.ones((z.shape[0], 1)), 
                 s=1, 
                 save_path=os.path.join(self.save_path, name), 
