@@ -195,16 +195,6 @@ class DREnv(Env):
             t2 = time.time()
             print("time used for fit-transform: {} s".format(t2-t1))
 
-            plt.cla()
-            draw_z(
-                z=normalise(z), 
-                cls=self.label, #np.ones((z.shape[0], 1)), 
-                s=1, 
-                save_path=os.path.join(self.save_path, name), 
-                display=False, 
-                title=name, 
-                palette='Spectral' # None
-            )
             # features = np.zeros((5, 1))
             # print("Please refer to image {}.".format(os.path.join(self.save_path, name)))
             # features[0] = int(input("\n1. How many clusters?\n\tcount number of clusters\n"))
@@ -292,6 +282,17 @@ class DREnv(Env):
 
             print("\nr1: {}, r2:{}\n".format(r1, r2))
 
+            plt.cla()
+            draw_z(
+                z=normalise(z), 
+                cls=self.label, #np.ones((z.shape[0], 1)), 
+                s=1, 
+                save_path=os.path.join(self.save_path, name), 
+                display=False, 
+                title=name + " reward: {:.4f}+{:.4f}".format(r1, r2), 
+                palette='Spectral' # None
+            )
+
             return r1 + r2
 
 
@@ -322,17 +323,17 @@ class DREnv(Env):
 
         # 3. obtain history
         # update history actions
-        self.history_actions = torch.vstack([self.history_actions[1:, :], action])
+        self.history_actions = torch.vstack([self.history_actions, action])
 
         # update history rewards
         self.history_rewards = torch.hstack([self.history_rewards, torch.tensor(reward)])
 
         # add history info to state
         if reward > self.history_rewards[max(-self.history_len, -len(self.history_rewards))]:
-            self.effect_history_actions = torch.tensor([-1])
+            self.effect_history_actions = torch.tensor([1])
         else:
-            self.effect_history_actions = torch.tensor([-2])
-        self.history = [self.history_actions, self.effect_history_actions]
+            self.effect_history_actions = torch.tensor([0])
+        self.history = [self.history_actions[-self.history_len:, :], self.effect_history_actions]
 
         # 4. obtain state
         state = self.obtain_state(self.x, self.label, n_neighbors, MN_ratio, FP_ratio, initial=False)

@@ -59,7 +59,7 @@ class Args:
     # Algorithm specific arguments
     env_id: str = "DVHL" # "CartPole-v1"
     """the id of the environment"""
-    total_timesteps: int = 120 # 500000
+    total_timesteps: int = 1200 # 500000
     """total timesteps of the experiments"""
     learning_rate: float = 2.5e-4
     """the learning rate of the optimizer"""
@@ -73,7 +73,7 @@ class Args:
     """the discount factor gamma"""
     gae_lambda: float = 0.95
     """the lambda for the general advantage estimation"""
-    num_minibatches: int = 4
+    num_minibatches: int = 8
     """the number of mini-batches"""
     update_epochs: int = 4
     """the K epochs to update the policy"""
@@ -323,9 +323,9 @@ def get_partition(data, k=20, labels=None):
 
 if __name__ == "__main__":
     args = tyro.cli(Args)
-    args.batch_size = int(args.num_envs * args.num_steps)                   # 12
-    args.minibatch_size = int(args.batch_size // args.num_minibatches)      # 4
-    args.num_iterations = args.total_timesteps // args.batch_size           # [120/12]=10
+    args.batch_size = int(args.num_envs * args.num_steps)                   # 1 * 32
+    args.minibatch_size = int(args.batch_size // args.num_minibatches)      # 32 // 8 = 4
+    args.num_iterations = args.total_timesteps // args.batch_size           # [1200/12]=100
     
     if args.run_name=="":
         run_name = f"{args.env_id}__{args.exp_name}__{time.strftime('%m%d%H%M%S', time.localtime())}__{args.seed}"
@@ -540,26 +540,11 @@ if __name__ == "__main__":
             for start in tqdm(range(0, args.batch_size, args.minibatch_size)):
                 end = start + args.minibatch_size
                 mb_inds = b_inds[start:end]
-                # print(mb_inds, b_actions)
-                # bobs = b_obs[mb_inds]
-                # bacs = b_actions.long()[mb_inds]
-                # print(bobs, bacs)
-                # _, newlogprob, entropy, newvalue = agent.get_action_and_value(bobs, bacs)
-                # print(len(b_obs), mb_inds)
+
                 b_obs_i = [b_obs[i] for i in mb_inds]
                 b_actions_i = b_actions.long()[mb_inds]
-                # print(b_obs_i, b_actions_i)
-                # print(mb_inds)
-                try:
-                    _, newlogprob, entropy, newvalue = agent.get_action_and_value(b_obs_i, b_actions_i, partition=partition)
-                except:
-                    print(newlogprob, entropy, newvalue)
-                    pickle.dump(b_obs_i, open("./error_b_obs_i.pkl", "wb"))
-                    torch.save(torch.tensor(envs.history_rewards), "./error_history_reward2.pt")
-                    torch.save(torch.tensor(envs.history_actions), "./error_history_actions2.pt")
-                    torch.save(agent.actor.state_dict(), "./error_actor2.pt")
-                    torch.save(agent.critic.state_dict(), "./error_critic2.pt")
-                    exit()
+
+                _, newlogprob, entropy, newvalue = agent.get_action_and_value(b_obs_i, b_actions_i, partition=partition)
 
                 logratio = newlogprob - b_logprobs[mb_inds]
                 ratio = logratio.exp()
@@ -622,9 +607,11 @@ if __name__ == "__main__":
         print("SPS:", int(global_step / (time.time() - start_time)))
         writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
 
-    envs.close()
-    writer.close()
-
     torch.save(agent.state_dict(), "runs/{}/agent.pt".format(run_name))
     torch.save(torch.tensor(all_rewards), "runs/{}/all_rewards.pt".format(run_name))
     torch.save(torch.tensor(all_actions), "runs/{}/all_actions.pt".format(run_name))
+    torch.save(envs.history_rewards, "runs/{}/history_rewards.pt".format(run_name))
+    torch.save(envs.history_actions, "runs/{}/history_actions.pt".format(run_name))
+    
+    envs.close()
+    writer.close()

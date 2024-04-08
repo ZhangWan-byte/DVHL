@@ -62,12 +62,12 @@ def draw_z(z, cls, s=25, x_highlight=None, y_highlight=None, save_path=None, dis
     # axes range
     plt.xlim((0, 1))
     plt.ylim((0, 1))
-    
-    if save_path!=None:
-        plt.savefig(save_path)
 
     if title!=None:
         plt.title(title)
+    
+    if save_path!=None:
+        plt.savefig(save_path, bbox_inches='tight')    
 
     if display==True:
         plt.show()
