@@ -196,7 +196,7 @@ for epoch in range(epochs):
         y = y.cuda()
 
         outputs = model(x1, x2)
-        loss = criterion(outputs, y)
+        loss = criterion(outputs.view(-1), y.view(-1))
         train_loss += loss.item()
 
         loss.backward()
@@ -217,7 +217,7 @@ for epoch in range(epochs):
             y = y.cuda()
     
             outputs = model(x1, x2)
-            loss = criterion(outputs, y)
+            loss = criterion(outputs.view(-1), y.view(-1))
             test_loss += loss.item()
 
             y_pred = outputs.detach().cpu()
