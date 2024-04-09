@@ -56,7 +56,7 @@ class PairPrefDataset(Dataset):
     def __init__(self, names, path="./exp1/data_augmented_v1/", size=256):
         
         self.names = names
-
+        self.path = path
         # self.all_z1 = []
         # self.all_z2 = []
         # self.all_y = []
@@ -82,7 +82,7 @@ class PairPrefDataset(Dataset):
     def __getitem__(self, idx):
         # z1 = self.all_z1[idx]
         # z2 = self.all_z2[idx]
-        z1, z2, y = torch.load(os.path.join(path, self.names[idx]))
+        z1, z2, y = torch.load(os.path.join(self.path, self.names[idx]))
         z1 = torch.from_numpy(z1).unsqueeze(0).float()
         z2 = torch.from_numpy(z2).unsqueeze(0).float()
         y = torch.tensor([y]).float()
