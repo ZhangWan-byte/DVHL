@@ -147,7 +147,7 @@ class Ensemble(nn.Module):
         for base_model in self.base_models:
             out = base_model(x1, x2)
             results.append(out.view(1,-1))
-        results = torch.vstack(results)
+        results = torch.mean(results, dim=0)
         return results
 
 model = Ensemble(
