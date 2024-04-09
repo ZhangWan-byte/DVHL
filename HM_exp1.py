@@ -92,6 +92,7 @@ class PairPrefDataset(Dataset):
 print("acquiring names...")
 names = os.listdir("./exp1/data_augmented_v1/")
 np.random.shuffle(names)
+names = names[:10000]
 train_names = names[:int(len(names)*0.8)]
 test_names = names[int(len(names)*0.8):]
 
