@@ -144,8 +144,13 @@ class Ensemble(nn.Module):
             self.base_models.append(base)
 
     def forward(self, x1, x2):
+
+        indices = np.random.choice(len(self.base_models), round(len(self.base_models)*0.7), replace=False)
+
         results = []
-        for base_model in self.base_models:
+        for i, base_model in enumerate(self.base_models):
+            if i not in indices:
+                continue
             out = base_model(x1, x2)
             results.append(out.view(1,-1))
         results = torch.vstack(results).mean(dim=0)
@@ -166,10 +171,10 @@ print("ensemble params: {}".format(sum([p.numel() for p in model.parameters()]))
 criterion = nn.BCELoss()
 
 optimizer = optim.Adam(model.parameters(), lr=3e-4)
-scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=10)
+scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=5)
 
 # Training loop
-epochs = 100
+epochs = 20
 batch_size = 32
 
 train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=None)#pref_pair)
