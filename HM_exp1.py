@@ -85,15 +85,18 @@ class PairPrefDataset(Dataset):
 
         return z1, z2, y
 
+print("acquiring names...")
 names = os.listdir("./exp1/data_augmented_v1/")
 np.random.shuffle(names)
 train_names = names[:int(len(names)*0.8)]
 test_names = names[int(len(names)*0.8):]
 
+print("processing train_dataset...")
 train_dataset = PairPrefDataset(train_names, path="./exp1/data_augmented_v1/", size=256)
 z1, z2, y = train_dataset[0]
 print("train: ", z1.shape, z2.shape, y)
 
+print("processing test_dataset...")
 test_dataset = PairPrefDataset(test_names, path="./exp1/data_augmented_v1/", size=256)
 z1, z2, y = test_dataset[0]
 print("test: ", z1.shape, z2.shape, y)
