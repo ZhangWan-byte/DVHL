@@ -57,31 +57,35 @@ class PairPrefDataset(Dataset):
         
         self.names = names
 
-        self.all_z1 = []
-        self.all_z2 = []
-        self.all_y = []
-        for i in tqdm(range(len(names))):
-            z1, z2, y = torch.load(os.path.join(path, self.names[i]))
+        # self.all_z1 = []
+        # self.all_z2 = []
+        # self.all_y = []
+        # for i in tqdm(range(len(names))):
+        #     z1, z2, y = torch.load(os.path.join(path, self.names[i]))
 
-            z1 = torch.from_numpy(z1).unsqueeze(0).float()
-            z2 = torch.from_numpy(z2).unsqueeze(0).float()
+        #     z1 = torch.from_numpy(z1).unsqueeze(0).float()
+        #     z2 = torch.from_numpy(z2).unsqueeze(0).float()
 
-            self.all_z1.append(z1)
-            self.all_z2.append(z2)
-            self.all_y.append(y)
+        #     self.all_z1.append(z1)
+        #     self.all_z2.append(z2)
+        #     self.all_y.append(y)
 
-        self.all_z1 = torch.vstack(self.all_z1).float()
-        self.all_z2 = torch.vstack(self.all_z2).float()
-        self.y = torch.tensor(self.all_y).float()
-        print("total samples: ", self.all_z1.shape[0])
+        # self.all_z1 = torch.vstack(self.all_z1).float()
+        # self.all_z2 = torch.vstack(self.all_z2).float()
+        # self.y = torch.tensor(self.all_y).float()
+
+        print("total samples: ", len(self.names))
 
     def __len__(self):
         return len(self.all_y)
 
     def __getitem__(self, idx):
-        z1 = self.all_z1[idx]
-        z2 = self.all_z2[idx]
-        y = self.all_y[idx]
+        # z1 = self.all_z1[idx]
+        # z2 = self.all_z2[idx]
+        z1, z2, y = torch.load(os.path.join(path, self.names[idx]))
+        z1 = torch.from_numpy(z1).unsqueeze(0).float()
+        z2 = torch.from_numpy(z2).unsqueeze(0).float()
+        y = torch.tensor([y]).float()
 
         return z1, z2, y
 
@@ -184,7 +188,7 @@ for epoch in range(epochs):
     # Training
     model.train()
     train_loss = 0.0
-    for x1, x2, y in tqdm(train_dataloader):
+    for x1, x2, y in train_dataloader:
         optimizer.zero_grad()
 
         x1 = x1.cuda()
