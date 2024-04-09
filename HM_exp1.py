@@ -142,10 +142,10 @@ class Ensemble(nn.Module):
             base = SiameseNet(hidden, block, num_block, in_channels, out_channels, num_classes).to(device)
             self.base_models.append(base)
 
-    def forward(self, x):
+    def forward(self, x1, x2):
         results = []
         for base_model in self.base_models:
-            out = base_model(x)
+            out = base_model(x1, x2)
             results.append(out.view(1,-1))
         results = torch.vstack(results)
         return results
