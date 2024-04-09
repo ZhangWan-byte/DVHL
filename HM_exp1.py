@@ -252,6 +252,6 @@ for epoch in range(epochs):
 # plt.legend(["train loss", "test loss"])
 # plt.show()
 
-torch.save(torch.tensor(test_acc_li), "./DVHL/exp1/test_acc.pt")
-torch.save(torch.tensor(train_loss_li), "./DVHL/exp1/train_loss.pt")
-torch.save(torch.tensor(test_loss_li), "./DVHL/exp1/test_loss.pt")
+torch.save(torch.tensor(test_acc_li), "./exp1/test_acc.pt")
+torch.save(torch.tensor(train_loss_li), "./exp1/train_loss.pt")
+torch.save(torch.tensor(test_loss_li), "./exp1/test_loss.pt")
