@@ -77,7 +77,7 @@ class PairPrefDataset(Dataset):
         print("total samples: ", len(self.names))
 
     def __len__(self):
-        return len(self.all_y)
+        return len(self.names)
 
     def __getitem__(self, idx):
         # z1 = self.all_z1[idx]
