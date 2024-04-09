@@ -169,10 +169,10 @@ scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=10)
 
 # Training loop
 epochs = 100
-batch_size = 128
+batch_size = 32
 
 train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=None)#pref_pair)
-test_dataloader = DataLoader(test_dataset, batch_size=100, shuffle=False, collate_fn=None)#pref_pair)
+test_dataloader = DataLoader(test_dataset, batch_size=16, shuffle=False, collate_fn=None)#pref_pair)
 
 ref_cls = torch.tensor([0, 1, 2, 3, 4]).cuda()
 
