@@ -7,7 +7,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from metrics import scagnostics
+# from metrics import scagnostics
 
 
 class DAB(nn.Module):
