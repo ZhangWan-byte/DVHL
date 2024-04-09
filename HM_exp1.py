@@ -151,7 +151,7 @@ class Ensemble(nn.Module):
         return results
 
 model = Ensemble(
-    num_models=10,
+    num_models=6,
     hidden=64, 
     block=BasicBlock, 
     num_block=[1,1,1,1], 
