@@ -91,8 +91,9 @@ class PairPrefDataset(Dataset):
 
 print("acquiring names...")
 names = os.listdir("./exp1/data_augmented_v1/")
+names = names[:29440] # delete last 5 imgs (46,47,48,49,50)
 np.random.shuffle(names)
-names = names[:10000]
+names = names[:20000]
 train_names = names[:int(len(names)*0.8)]
 test_names = names[int(len(names)*0.8):]
 
@@ -107,7 +108,7 @@ z1, z2, y = test_dataset[0]
 print("test: ", z1.shape, z2.shape, y)
 
 class SiameseNet(nn.Module):
-    def __init__(self, hidden, block, num_block, in_channels, out_channels=[10, 16, 32, 64], num_classes=16):
+    def __init__(self, hidden, block, num_block, in_channels, out_channels=[10, 16, 32, 64]):
         super().__init__()
         self.cnn = ResNet(
             block=BasicBlock, 
@@ -145,7 +146,7 @@ class Ensemble(nn.Module):
 
     def forward(self, x1, x2):
 
-        indices = np.random.choice(len(self.base_models), round(len(self.base_models)*0.7), replace=False)
+        indices = np.random.choice(len(self.base_models), round(len(self.base_models)*0.8), replace=False)
 
         results = []
         for i, base_model in enumerate(self.base_models):
@@ -160,7 +161,7 @@ model = Ensemble(
     num_models=6,
     hidden=64, 
     block=BasicBlock, 
-    num_block=[1,1,1,1], 
+    num_block=[2,2,2,2], #[1,1,1,1], 
     num_classes=5, 
     in_channels=1, 
     out_channels=[10, 16, 24, 32], 
@@ -170,17 +171,17 @@ print("ensemble params: {}".format(sum([p.numel() for p in model.parameters()]))
 
 criterion = nn.BCELoss()
 
-optimizer = optim.Adam(model.parameters(), lr=3e-4)
-scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=5)
-
-# Training loop
-epochs = 100
+epochs = 5
 batch_size = 64
+
+optimizer = optim.Adam(model.parameters(), lr=3e-4)
+# scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=2, T_mult=0.8)
+scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs, eta_min=1e-6)
 
 train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=None)#pref_pair)
 test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, collate_fn=None)#pref_pair)
 
-ref_cls = torch.tensor([0, 1, 2, 3, 4]).cuda()
+# Training loop
 
 best_test_loss = 10.0
 best_acc = 0.0
@@ -232,7 +233,7 @@ for epoch in range(epochs):
             y_true = y.detach().cpu()
 
             total += y.size(0)
-            correct += (y_pred.round() == y_true).sum().item()
+            correct += (y_pred.round().view(-1) == y_true.view(-1)).sum().item()
 
     # test_loss /= len(test_dataloader.dataset)
     test_loss /= batch_size
@@ -248,13 +249,13 @@ for epoch in range(epochs):
 
     with open('./out.txt', 'w') as f:
         print('Epoch [{}/{}], Train Loss: {:.4f}, Test Loss: {:.4f}, Test Acc: {:.2f}, Time: {:.2f}'.format(
-            epoch+1, epoch, train_loss, test_loss, accuracy, t2-t1
+            epoch+1, epochs, train_loss, test_loss, accuracy, t2-t1
         ), file=f)  # Python 3.x
 
     if test_loss < best_test_loss:
         best_test_loss = test_loss
         best_acc = accuracy
-        torch.save(model.state_dict(), "./exp1/model_v1.pt")
+        torch.save(model.state_dict(), "./exp1/model_v1_{}.pt".format(cur_time))
 
     train_loss_li.append(train_loss)
     test_loss_li.append(test_loss)
@@ -275,6 +276,6 @@ for epoch in range(epochs):
 # plt.legend(["train loss", "test loss"])
 # plt.show()
 
-torch.save(torch.tensor(test_acc_li), "./exp1/test_acc.pt")
-torch.save(torch.tensor(train_loss_li), "./exp1/train_loss.pt")
-torch.save(torch.tensor(test_loss_li), "./exp1/test_loss.pt")
+torch.save(torch.tensor(test_acc_li), "./exp1/test_acc_{}.pt".format(cur_time))
+torch.save(torch.tensor(train_loss_li), "./exp1/train_loss_{}.pt".format(cur_time))
+torch.save(torch.tensor(test_loss_li), "./exp1/test_loss_{}.pt".format(cur_time))
