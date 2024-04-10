@@ -26,6 +26,7 @@ from models import *
 from utils import *
 from datasets import *
 
+cur_time = time.strftime('%m%d%H%M%S', time.localtime())
 
 def get_Ihat(Z, size=1000):
     mat = np.zeros((size,size))
@@ -247,7 +248,7 @@ for epoch in range(epochs):
           f"Test Accuracy: {accuracy:.2f}%, "
           f"Epoch Time: {t2-t1:.2f}")
 
-    with open('./out.txt', 'w') as f:
+    with open('./out_{}.txt'.format(cur_time), 'w') as f:
         print('Epoch [{}/{}], Train Loss: {:.4f}, Test Loss: {:.4f}, Test Acc: {:.2f}, Time: {:.2f}'.format(
             epoch+1, epochs, train_loss, test_loss, accuracy, t2-t1
         ), file=f)  # Python 3.x
