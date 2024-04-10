@@ -27,6 +27,8 @@ from utils import *
 from datasets import *
 
 cur_time = time.strftime('%m%d%H%M%S', time.localtime())
+with open('./exp1/out_{}.txt'.format(cur_time), 'a') as f:
+    print("current time: {}".format(cur_time), file=f)
 
 def get_Ihat(Z, size=1000):
     mat = np.zeros((size,size))
@@ -89,8 +91,8 @@ class PairPrefDataset(Dataset):
         y = torch.tensor([y]).float()
 
         return z1, z2, y
-
-print("acquiring names...")
+with open('./exp1/out_{}.txt'.format(cur_time), 'a') as f:
+    print("acquiring names...", file=f)
 names = os.listdir("./exp1/data_augmented_v1/")
 names = names[:29440] # delete last 5 imgs (46,47,48,49,50)
 np.random.shuffle(names)
@@ -98,12 +100,14 @@ names = names[:10000]
 train_names = names[:int(len(names)*0.8)]
 test_names = names[int(len(names)*0.8):]
 
-print("processing train_dataset...")
+with open('./exp1/out_{}.txt'.format(cur_time), 'a') as f:
+    print("processing train_dataset...", file=f)
 train_dataset = PairPrefDataset(train_names, path="./exp1/data_augmented_v1/", size=256)
 z1, z2, y = train_dataset[0]
 print("train: ", z1.shape, z2.shape, y)
 
-print("processing test_dataset...")
+with open('./exp1/out_{}.txt'.format(cur_time), 'a') as f:
+    print("processing test_dataset...", file=f)
 test_dataset = PairPrefDataset(test_names, path="./exp1/data_augmented_v1/", size=256)
 z1, z2, y = test_dataset[0]
 print("test: ", z1.shape, z2.shape, y)
@@ -162,12 +166,14 @@ model = Ensemble(
     num_models=6,
     hidden=64, 
     block=BasicBlock, 
-    num_block=[2,2,2,2], #[1,1,1,1],  
+    num_block=[3, 4, 6, 3], #[2,2,2,2], #[1,1,1,1],  
     in_channels=1, 
     out_channels=[10, 16, 24, 32], 
     device=torch.device('cuda')
 )
 print("ensemble params: {}".format(sum([p.numel() for p in model.parameters()])))
+with open('./exp1/out_{}.txt'.format(cur_time), 'a') as f:
+    print("ensemble params: {}".format(sum([p.numel() for p in model.parameters()])), file=f)
 
 criterion = nn.BCELoss()
 
@@ -247,7 +253,7 @@ for epoch in range(epochs):
           f"Test Accuracy: {accuracy:.2f}%, "
           f"Epoch Time: {t2-t1:.2f}")
 
-    with open('./out_{}.txt'.format(cur_time), 'a') as f:
+    with open('./exp1/out_{}.txt'.format(cur_time), 'a') as f:
         print('\nEpoch [{}/{}], Train Loss: {:.4f}, Test Loss: {:.4f}, Test Acc: {:.2f}, Time: {:.2f}\n'.format(
             epoch+1, epochs, train_loss, test_loss, accuracy, t2-t1
         ), file=f)  # Python 3.x

@@ -46,12 +46,13 @@ class SiameseNet(nn.Module):
 
 
 class DREnv(Env):
-    def __init__(self, x, label, model_path="./exp1/model_CosAnneal1.pt", action_space=27, history_len=7, save_path=None, num_steps=32, num_partition=20):
+    def __init__(self, x, label, model_path="./exp1/model_CosAnneal1.pt", action_space=27, history_len=7, save_path=None, num_steps=32, num_partition=20, size=256):
         self.x = x
         self.label = label
         self.best_reward = 0
         self.best_feedback = 0
         self.name = None
+        self.size = size
 
         self.count = 0
         self.current_state = None
@@ -85,6 +86,7 @@ class DREnv(Env):
 
         # best & last vis
         self.best_z = None
+        self.best_z0 = None
         self.last_z = None
 
         # history: actions / effect
@@ -169,6 +171,43 @@ class DREnv(Env):
         return state
 
 
+    def heuristic(out_mean, out_var, type=2, t1=0.02, t2=0.5):
+
+        if type==0:
+        # constructively conservative and sparse
+            if out_var < t1:
+                r = out_mean.round()
+            else:
+                if out_mean > t2:
+                    r = max((out_mean - np.sqrt(out_var)*3).round().item(), 0)
+                else:
+                    r = min((out_mean + np.sqrt(out_var)*3).round().item(), 1)
+
+        elif type==1:
+        # constructively conservative and dense
+            if out_var < t1:
+                r = out_mean
+            else:
+                if out_mean > t2:
+                    r = max((out_mean - np.sqrt(out_var)*3).item(), 0)
+                else:
+                    r = min((out_mean + np.sqrt(out_var)*3).item(), 1)
+
+        elif type==2:
+        # conservative and dense
+            r = max((out_mean - np.sqrt(out_var)*3).item(), 0)
+
+        elif type==3:
+        # conservative and sparse
+            r = max((out_mean - np.sqrt(out_var)*3).round().item(), 0)
+
+        else:
+            print("not implemented heuristic!")
+            exit()
+
+        return r
+
+
     def obtain_reward(self, state):
         with torch.no_grad():
 
@@ -229,8 +268,8 @@ class DREnv(Env):
 
             self.model.train()
 
-            z = get_Ihat(normalise(z0), size=100)
-            z = torch.from_numpy(z).view(1,1,100,100).float().cuda()
+            z = get_Ihat(normalise(z0), size=self.size)
+            z = torch.from_numpy(z).view(1,1,self.size,self.size).float().cuda()
             
             # r1: compared to last vis
             # rigorous reward: allow false negative, rejct false positive
@@ -241,17 +280,7 @@ class DREnv(Env):
             out1_mean = np.mean(out1)
             out1_var = np.var(out1)
 
-            if out1_var<0.02:
-                r1 = out1_mean#.round()
-            else:
-                # if out1_mean>0.5:
-                #     r1 = max((out1_mean - np.sqrt(out1_var)*3).item(), 0)
-                # else:
-                #     r1 = min((out1_mean + np.sqrt(out1_var)*3).item(), 1)
-                if out1_mean>0.5:
-                    r1 = max((out1_mean - np.sqrt(out1_var)*3).round().item(), 0)
-                else:
-                    r1 = min((out1_mean + np.sqrt(out1_var)*3).round().item(), 1)
+            r1 = self.heuristic(out1_mean, out1_var, type=2, t1=0.02, t2=0.5)
 
             # r2: compared to best vis
             out2 = []
@@ -261,22 +290,14 @@ class DREnv(Env):
             out2_mean = np.mean(out2)
             out2_var = np.var(out2)
 
-            if out2_var<0.02:
-                r2 = out2_mean#.round()
-            else:
-                # if out2_mean>0.5:
-                #     r2 = max((out2_mean - np.sqrt(out2_var)*3).item(), 0)
-                # else:
-                #     r2 = min((out2_mean + np.sqrt(out2_var)*3).item(), 1)
-                if out2_mean>0.5:
-                    r2 = max((out2_mean - np.sqrt(out2_var)*3).round().item(), 0)
-                else:
-                    r2 = min((out2_mean + np.sqrt(out2_var)*3).round().item(), 1)
+            r2 = self.heuristic(out2_mean, out2_var, type=2, t1=0.02, t2=0.5)
 
             # update last and best vis
             self.last_z = z
-            if r1+r2 > self.best_reward:
+            # if r1+r2 > self.best_reward:
+            if out1_mean>0.5 and out1_var<0.02:
                 self.best_z = z
+                self.best_z0 = z0
                 self.best_name = name
                 self.best_reward = r1+r2
 
@@ -377,16 +398,17 @@ class DREnv(Env):
             pair_MN=self.current_state["pair_MN"], 
             pair_FP=self.current_state["pair_FP"]
         )
-        z = self.reducer.fit_transform(
+        z0 = self.reducer.fit_transform(
             self.x, 
             n_neighbors=self.current_state["n_neighbors"], 
             n_MN=np.round(self.current_state["MN_ratio"] * self.current_state["n_neighbors"]).astype(np.int32), 
             n_FP=np.round(self.current_state["FP_ratio"] * self.current_state["n_neighbors"]).astype(np.int32)
         )
-        z = get_Ihat(normalise(z), size=100)
-        z = torch.from_numpy(z).view(1,1,100,100).float().cuda()
+        z = get_Ihat(normalise(z0), size=self.size)
+        z = torch.from_numpy(z).view(1,1,self.size,self.size).float().cuda()
 
         self.last_z = z
         self.best_z = z
+        self.best_z0 = z0
 
         return self.current_state
