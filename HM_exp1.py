@@ -171,7 +171,7 @@ print("ensemble params: {}".format(sum([p.numel() for p in model.parameters()]))
 
 criterion = nn.BCELoss()
 
-epochs = 5
+epochs = 10
 batch_size = 64
 
 optimizer = optim.Adam(model.parameters(), lr=3e-4)
