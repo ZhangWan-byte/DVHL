@@ -174,11 +174,11 @@ optimizer = optim.Adam(model.parameters(), lr=3e-4)
 scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=5)
 
 # Training loop
-epochs = 20
-batch_size = 32
+epochs = 100
+batch_size = 64
 
 train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=None)#pref_pair)
-test_dataloader = DataLoader(test_dataset, batch_size=16, shuffle=False, collate_fn=None)#pref_pair)
+test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, collate_fn=None)#pref_pair)
 
 ref_cls = torch.tensor([0, 1, 2, 3, 4]).cuda()
 
@@ -190,6 +190,8 @@ test_loss_li = []
 test_acc_li = []
 
 for epoch in range(epochs):
+
+    t1 = time.time()
 
     # Training
     model.train()
@@ -233,13 +235,21 @@ for epoch in range(epochs):
             correct += (y_pred.round() == y_true).sum().item()
 
     # test_loss /= len(test_dataloader.dataset)
-    test_loss /= 100
+    test_loss /= batch_size
     accuracy = 100.0 * correct / total
+
+    t2 = time.time()
 
     print(f"Epoch [{epoch+1}/{epochs}], "
           f"Training Loss: {train_loss:.4f}, "
           f"Test Loss: {test_loss:.4f}, "
-          f"Test Accuracy: {accuracy:.2f}%")
+          f"Test Accuracy: {accuracy:.2f}%, "
+          f"Epoch Time: {t2-t1:.2f}")
+
+    with open('./out.txt', 'w') as f:
+        print('Epoch [{}/{}], Train Loss: {:.4f}, Test Loss: {:.4f}, Test Acc: {:.2f}, Time: {:.2f}'.format(
+            epoch+1, epoch, train_loss, test_loss, accuracy, t2-t1
+        ), file=f)  # Python 3.x
 
     if test_loss < best_test_loss:
         best_test_loss = test_loss
