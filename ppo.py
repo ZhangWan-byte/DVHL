@@ -448,6 +448,8 @@ if __name__ == "__main__":
     # data, labels = data[idx], labels[idx]
 
     print("data: {}, labels: {}".format(data.shape, labels.shape))
+    with open("runs/{}/println.txt".format(run_name), 'a') as f:
+        print("data: {}, labels: {}".format(data.shape, labels.shape), file=f)
     envs = DREnv(
         data.astype('float32'), 
         labels.astype('float32'), 
@@ -464,6 +466,9 @@ if __name__ == "__main__":
 
     print("actor params: {}".format(sum([p.numel() for p in agent.actor.parameters()])))
     print("critic params: {}".format(sum([p.numel() for p in agent.critic.parameters()])))
+    with open("runs/{}/println.txt".format(run_name), 'a') as f:
+        print("actor params: {}".format(sum([p.numel() for p in agent.actor.parameters()])), file=f)
+        print("critic params: {}".format(sum([p.numel() for p in agent.critic.parameters()])), file=f)
 
     # ALGO Logic: Storage setup
     # obs = torch.zeros((args.num_steps, args.num_envs) + envs.single_observation_space.shape).to(device)
@@ -549,7 +554,13 @@ if __name__ == "__main__":
             print("\nhistory_len:{}\nhistory_rewards:{}\nhistory_actions:{}\nreward:{}\nnext_done:{}".format(
                 envs.history_len, envs.history_rewards, envs.history_actions, reward, 
                 next_done.detach().cpu().item()))
+            with open("runs/{}/println.txt".format(run_name), 'a') as f:
+                print("\nhistory_len:{}\nhistory_rewards:{}\nhistory_actions:{}\nreward:{}\nnext_done:{}".format(
+                envs.history_len, envs.history_rewards, envs.history_actions, reward, 
+                next_done.detach().cpu().item()), file=f)
             print("best: {}".format(envs.best_name))
+            with open("runs/{}/println.txt".format(run_name), 'a') as f:
+                print("best: {}".format(envs.best_name), file=f)
 
             if "final_info" in infos:
                 for info in infos["final_info"]:
@@ -601,9 +612,14 @@ if __name__ == "__main__":
 
                 _, newlogprob, entropy, newvalue = agent.get_action_and_value(b_obs_i, b_actions_i, partition=partition)
                 print("newlogprob: {}, b_logprobs[mb_inds]: {}, mb_inds: {}".format(newlogprob, b_logprobs[mb_inds], mb_inds))
+                with open("runs/{}/println.txt".format(run_name), 'a') as f:
+                    print("newlogprob: {}, b_logprobs[mb_inds]: {}, mb_inds: {}".format(newlogprob, b_logprobs[mb_inds], mb_inds), file=f)
                 logratio = newlogprob - b_logprobs[mb_inds]
                 ratio = logratio.exp()
                 print("logratio: ", logratio)
+                with open("runs/{}/println.txt".format(run_name), 'a') as f:
+                    print("logratio: ", logratio, file=f)
+                
                 with torch.no_grad():
                     # calculate approx_kl http://joschu.net/blog/kl-approx.html
                     old_approx_kl = (-logratio).mean(dim=0)
@@ -612,9 +628,13 @@ if __name__ == "__main__":
 
                 mb_advantages = b_advantages[mb_inds]
                 print("mb_advantages: ", mb_advantages)
+                with open("runs/{}/println.txt".format(run_name), 'a') as f:
+                    print("mb_advantages: ", mb_advantages, file=f)
                 if args.norm_adv:
                     mb_advantages = (mb_advantages - mb_advantages.mean(dim=0)) / (mb_advantages.std(dim=0) + 1e-8)
                 print("mb_advantages, ratio: ", mb_advantages, ratio)
+                with open("runs/{}/println.txt".format(run_name), 'a') as f:
+                    print("mb_advantages, ratio: ", mb_advantages, ratio, file=f)
                 # Policy loss
                 pg_loss1 = -mb_advantages * ratio
                 pg_loss2 = -mb_advantages * torch.clamp(ratio, 1 - args.clip_coef, 1 + args.clip_coef)
@@ -639,6 +659,8 @@ if __name__ == "__main__":
                 # print("sub-loss shapes", pg_loss.shape, entropy_loss.shape, v_loss.shape) # (20,) (20,) (20,)
                 loss = pg_loss - args.ent_coef * entropy_loss + args.vf_coef * v_loss
                 print("loss: ", loss, pg_loss, entropy_loss, v_loss)
+                with open("runs/{}/println.txt".format(run_name), 'a') as f:
+                    print("loss: ", loss, pg_loss, entropy_loss, v_loss, file=f)
                 optimizer.zero_grad()
                 loss.mean().backward()
                 nn.utils.clip_grad_norm_(agent.parameters(), args.max_grad_norm)
@@ -661,11 +683,11 @@ if __name__ == "__main__":
         writer.add_scalar("losses/clipfrac", np.mean(clipfracs), global_step)
         writer.add_scalar("losses/explained_variance", explained_var, global_step)
         print("SPS:", int(global_step / (time.time() - start_time)))
+        with open("runs/{}/println.txt".format(run_name), 'a') as f:
+            print("SPS:", int(global_step / (time.time() - start_time)), file=f)
         writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
 
         torch.save(agent.state_dict(), "runs/{}/agent.pt".format(run_name))
-        # torch.save(torch.tensor(all_rewards), "runs/{}/all_rewards.pt".format(run_name))
-        # torch.save(torch.tensor(all_actions), "runs/{}/all_actions.pt".format(run_name))
         torch.save(envs.history_rewards, "runs/{}/history_rewards.pt".format(run_name))
         torch.save(envs.history_actions, "runs/{}/history_actions.pt".format(run_name))
     

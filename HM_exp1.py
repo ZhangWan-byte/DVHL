@@ -27,7 +27,7 @@ from utils import *
 from datasets import *
 
 cur_time = time.strftime('%m%d%H%M%S', time.localtime())
-with open('./exp1/out_{}.txt'.format(cur_time), 'a') as f:
+with open('./exp1_v2/out_{}.txt'.format(cur_time), 'a') as f:
     print("current time: {}".format(cur_time), file=f)
 
 def get_Ihat(Z, size=1000):
@@ -56,7 +56,7 @@ def flip(z):
 
 
 class PairPrefDataset(Dataset):
-    def __init__(self, names, path="./exp1/data_augmented_v1/", size=256):
+    def __init__(self, names, path="./exp1_v2/data_augmented_v1/", size=256):
         
         self.names = names
         self.path = path
@@ -91,24 +91,24 @@ class PairPrefDataset(Dataset):
         y = torch.tensor([y]).float()
 
         return z1, z2, y
-with open('./exp1/out_{}.txt'.format(cur_time), 'a') as f:
+with open('./exp1_v2/out_{}.txt'.format(cur_time), 'a') as f:
     print("acquiring names...", file=f)
-names = os.listdir("./exp1/data_augmented_v1/")
+names = os.listdir("./exp1_v2/data_augmented_v1/")
 names = names[:29440] # delete last 5 imgs (46,47,48,49,50)
 np.random.shuffle(names)
 # names = names[:10000]
 train_names = names[:int(len(names)*0.8)]
 test_names = names[int(len(names)*0.8):]
 
-with open('./exp1/out_{}.txt'.format(cur_time), 'a') as f:
+with open('./exp1_v2/out_{}.txt'.format(cur_time), 'a') as f:
     print("processing train_dataset...", file=f)
-train_dataset = PairPrefDataset(train_names, path="./exp1/data_augmented_v1/", size=256)
+train_dataset = PairPrefDataset(train_names, path="./exp1_v2/data_augmented_v1/", size=256)
 z1, z2, y = train_dataset[0]
 print("train: ", z1.shape, z2.shape, y)
 
-with open('./exp1/out_{}.txt'.format(cur_time), 'a') as f:
+with open('./exp1_v2/out_{}.txt'.format(cur_time), 'a') as f:
     print("processing test_dataset...", file=f)
-test_dataset = PairPrefDataset(test_names, path="./exp1/data_augmented_v1/", size=256)
+test_dataset = PairPrefDataset(test_names, path="./exp1_v2/data_augmented_v1/", size=256)
 z1, z2, y = test_dataset[0]
 print("test: ", z1.shape, z2.shape, y)
 
@@ -172,7 +172,7 @@ model = Ensemble(
     device=torch.device('cuda')
 )
 print("ensemble params: {}".format(sum([p.numel() for p in model.parameters()])))
-with open('./exp1/out_{}.txt'.format(cur_time), 'a') as f:
+with open('./exp1_v2/out_{}.txt'.format(cur_time), 'a') as f:
     print("ensemble params: {}".format(sum([p.numel() for p in model.parameters()])), file=f)
 
 criterion = nn.BCELoss()
@@ -253,7 +253,7 @@ for epoch in range(epochs):
           f"Test Accuracy: {accuracy:.2f}%, "
           f"Epoch Time: {t2-t1:.2f}")
 
-    with open('./exp1/out_{}.txt'.format(cur_time), 'a') as f:
+    with open('./exp1_v2/out_{}.txt'.format(cur_time), 'a') as f:
         print('\nEpoch [{}/{}], Train Loss: {:.4f}, Test Loss: {:.4f}, Test Acc: {:.2f}, Time: {:.2f}\n'.format(
             epoch+1, epochs, train_loss, test_loss, accuracy, t2-t1
         ), file=f)  # Python 3.x
@@ -261,7 +261,7 @@ for epoch in range(epochs):
     if test_loss < best_test_loss:
         best_test_loss = test_loss
         best_acc = accuracy
-        torch.save(model.state_dict(), "./exp1/model_v1_{}.pt".format(cur_time))
+        torch.save(model.state_dict(), "./exp1_v2/model_v1_{}.pt".format(cur_time))
 
     train_loss_li.append(train_loss)
     test_loss_li.append(test_loss)
@@ -282,6 +282,6 @@ for epoch in range(epochs):
 # plt.legend(["train loss", "test loss"])
 # plt.show()
 
-torch.save(torch.tensor(test_acc_li), "./exp1/test_acc_{}.pt".format(cur_time))
-torch.save(torch.tensor(train_loss_li), "./exp1/train_loss_{}.pt".format(cur_time))
-torch.save(torch.tensor(test_loss_li), "./exp1/test_loss_{}.pt".format(cur_time))
+torch.save(torch.tensor(test_acc_li), "./exp1_v2/test_acc_{}.pt".format(cur_time))
+torch.save(torch.tensor(train_loss_li), "./exp1_v2/train_loss_{}.pt".format(cur_time))
+torch.save(torch.tensor(test_loss_li), "./exp1_v2/test_loss_{}.pt".format(cur_time))
