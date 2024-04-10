@@ -247,29 +247,83 @@ class GAT(torch.nn.Module):
         return cluster_means
 
 
+class PolicyEnsemble(nn.Module):
+    def __init__(self, num_models, num_node_features, hidden, num_actions, out_dim, std, history_len, num_partition, device):
+        super().__init__()
+        self.base_models = nn.ModuleList([])
+        for _ in range(num_models):
+            base = GAT(
+                num_node_features, 
+                hidden, 
+                num_actions=num_actions, 
+                out_dim=out_dim, 
+                std=std, 
+                history_len=history_len, 
+                num_partition=num_partition
+            ).to(device)
+            self.base_models.append(base)
+
+    def forward(self, state, partition=None):
+
+        indices = np.random.choice(len(self.base_models), round(len(self.base_models)*0.8), replace=False)
+
+        results = []
+        for i, base_model in enumerate(self.base_models):
+            if i not in indices:
+                continue
+            out = base_model(state, partition)                  # (num_partition, out_dim)
+            results.append(out)
+
+        results = torch.stack(results, dim=0).mean(dim=0)       # (num_partition, out_dim)
+
+        return results
+
+
 class Agent(nn.Module):
-    def __init__(self, envs, num_node_features=50, hidden=64, history_len=7, num_actions=27, num_partition=None):
+    def __init__(self, envs, num_node_features=50, hidden=64, history_len=7, num_actions=27, num_partition=None, device=torch.device('cuda' if torch.cuda.is_available() else 'cpu')):
         super().__init__()
 
-        self.critic = GAT(
-            num_node_features, 
-            hidden, 
+        # self.critic = GAT(
+        #     num_node_features, 
+        #     hidden, 
+        #     num_actions=num_actions, 
+        #     out_dim=1, 
+        #     std=1.0, 
+        #     history_len=history_len, 
+        #     num_partition=num_partition
+        # )
+        # self.actor = GAT(
+        #     num_node_features, 
+        #     hidden, 
+        #     num_actions=num_actions, 
+        #     out_dim=num_actions, 
+        #     std=0.01, 
+        #     history_len=history_len, 
+        #     num_partition=num_partition
+        # )
+        self.critic = PolicyEnsemble(
+            num_models=6, 
+            num_node_features=num_node_features, 
+            hidden=hidden, 
             num_actions=num_actions, 
             out_dim=1, 
             std=1.0, 
             history_len=history_len, 
-            num_partition=num_partition
+            num_partition=num_partition, 
+            device=device
         )
-        self.actor = GAT(
-            num_node_features, 
-            hidden, 
+        self.actor = PolicyEnsemble(
+            num_models=6, 
+            num_node_features=num_node_features, 
+            hidden=hidden, 
             num_actions=num_actions, 
             out_dim=num_actions, 
             std=0.01, 
             history_len=history_len, 
-            num_partition=num_partition
+            num_partition=num_partition, 
+            device=device
         )
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.device = device
 
     def get_value(self, state, partition=None):
 

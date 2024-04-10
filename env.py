@@ -52,6 +52,7 @@ class DREnv(Env):
         self.best_reward = 0
         self.best_feedback = 0
         self.name = None
+        self.best_name = None
         self.size = size
 
         self.count = 0
@@ -114,8 +115,8 @@ class DREnv(Env):
         if initial==True:
 
             n_neighbors = None
-            MN_ratio = np.ones(x.shape[0]) * 1.0 # 0.5
-            FP_ratio = np.ones(x.shape[0]) * 10.0 # 2.0
+            MN_ratio = np.ones(x.shape[0]) * 2.0 # 0.5
+            FP_ratio = np.ones(x.shape[0]) * 100.0 # 2.0
 
         num_nodes = x.shape[0]
 
@@ -171,10 +172,10 @@ class DREnv(Env):
         return state
 
 
-    def heuristic(out_mean, out_var, type=2, t1=0.02, t2=0.5):
+    def heuristic(self, out_mean, out_var, mode=2, t1=0.02, t2=0.5):
 
-        if type==0:
-        # constructively conservative and sparse
+        if mode==0:
+        # constructively conservative and discrete and sparse
             if out_var < t1:
                 r = out_mean.round()
             else:
@@ -183,22 +184,22 @@ class DREnv(Env):
                 else:
                     r = min((out_mean + np.sqrt(out_var)*3).round().item(), 1)
 
-        elif type==1:
-        # constructively conservative and dense
+        elif mode==1:
+        # constructively conservative and continuous and dense
             if out_var < t1:
                 r = out_mean
             else:
                 if out_mean > t2:
-                    r = max((out_mean - np.sqrt(out_var)*3).item(), 0)
+                    r = max((out_mean - np.sqrt(out_var)).item(), 0)
                 else:
-                    r = min((out_mean + np.sqrt(out_var)*3).item(), 1)
+                    r = min((out_mean + np.sqrt(out_var)).item(), 1)
 
-        elif type==2:
-        # conservative and dense
-            r = max((out_mean - np.sqrt(out_var)*3).item(), 0)
+        elif mode==2:
+        # conservative and continuous and dense
+            r = max((out_mean - np.sqrt(out_var)).item(), 0)
 
-        elif type==3:
-        # conservative and sparse
+        elif mode==3:
+        # conservative and discrete and sparse
             r = max((out_mean - np.sqrt(out_var)*3).round().item(), 0)
 
         else:
@@ -280,7 +281,7 @@ class DREnv(Env):
             out1_mean = np.mean(out1)
             out1_var = np.var(out1)
 
-            r1 = self.heuristic(out1_mean, out1_var, type=2, t1=0.02, t2=0.5)
+            r1 = self.heuristic(out1_mean, out1_var, mode=2, t1=0.02, t2=0.5)
 
             # r2: compared to best vis
             out2 = []
@@ -290,12 +291,12 @@ class DREnv(Env):
             out2_mean = np.mean(out2)
             out2_var = np.var(out2)
 
-            r2 = self.heuristic(out2_mean, out2_var, type=2, t1=0.02, t2=0.5)
+            r2 = self.heuristic(out2_mean, out2_var, mode=2, t1=0.02, t2=0.5)
 
             # update last and best vis
             self.last_z = z
             # if r1+r2 > self.best_reward:
-            if out1_mean>0.5 and out1_var<0.02:
+            if out2_mean>0.5 and out2_var<0.02:
                 self.best_z = z
                 self.best_z0 = z0
                 self.best_name = name
