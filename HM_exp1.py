@@ -138,11 +138,11 @@ class SiameseNet(nn.Module):
         return x
 
 class Ensemble(nn.Module):
-    def __init__(self, num_models, hidden, block, num_block, in_channels, out_channels, num_classes, device):
+    def __init__(self, num_models, hidden, block, num_block, in_channels, out_channels, device):
         super().__init__()
         self.base_models = nn.ModuleList([])
         for _ in range(num_models):
-            base = SiameseNet(hidden, block, num_block, in_channels, out_channels, num_classes).to(device)
+            base = SiameseNet(hidden, block, num_block, in_channels, out_channels).to(device)
             self.base_models.append(base)
 
     def forward(self, x1, x2):
@@ -162,8 +162,7 @@ model = Ensemble(
     num_models=6,
     hidden=64, 
     block=BasicBlock, 
-    num_block=[2,2,2,2], #[1,1,1,1], 
-    num_classes=5, 
+    num_block=[2,2,2,2], #[1,1,1,1],  
     in_channels=1, 
     out_channels=[10, 16, 24, 32], 
     device=torch.device('cuda')
