@@ -94,7 +94,7 @@ print("acquiring names...")
 names = os.listdir("./exp1/data_augmented_v1/")
 names = names[:29440] # delete last 5 imgs (46,47,48,49,50)
 np.random.shuffle(names)
-names = names[:20000]
+names = names[:10000]
 train_names = names[:int(len(names)*0.8)]
 test_names = names[int(len(names)*0.8):]
 
@@ -247,8 +247,8 @@ for epoch in range(epochs):
           f"Test Accuracy: {accuracy:.2f}%, "
           f"Epoch Time: {t2-t1:.2f}")
 
-    with open('./out_{}.txt'.format(cur_time), 'w') as f:
-        print('Epoch [{}/{}], Train Loss: {:.4f}, Test Loss: {:.4f}, Test Acc: {:.2f}, Time: {:.2f}'.format(
+    with open('./out_{}.txt'.format(cur_time), 'a') as f:
+        print('\nEpoch [{}/{}], Train Loss: {:.4f}, Test Loss: {:.4f}, Test Acc: {:.2f}, Time: {:.2f}\n'.format(
             epoch+1, epochs, train_loss, test_loss, accuracy, t2-t1
         ), file=f)  # Python 3.x
 
