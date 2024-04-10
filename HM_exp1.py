@@ -96,7 +96,7 @@ with open('./exp1/out_{}.txt'.format(cur_time), 'a') as f:
 names = os.listdir("./exp1/data_augmented_v1/")
 names = names[:29440] # delete last 5 imgs (46,47,48,49,50)
 np.random.shuffle(names)
-names = names[:10000]
+# names = names[:10000]
 train_names = names[:int(len(names)*0.8)]
 test_names = names[int(len(names)*0.8):]
 
