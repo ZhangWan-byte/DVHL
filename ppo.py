@@ -18,7 +18,7 @@ from torch_geometric.nn import GCNConv, GATv2Conv, TopKPooling
 from torch.nn import MultiheadAttention
 
 # from annoy import AnnoyIndex
-from myPaCMAP import distance_to_option
+# from myPaCMAP import distance_to_option
 from env import DREnv
 
 import warnings
