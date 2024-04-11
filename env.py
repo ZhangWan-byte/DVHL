@@ -46,7 +46,7 @@ class SiameseNet(nn.Module):
 
 
 class DREnv(Env):
-    def __init__(self, x, label, model_path="./exp1/model_CosAnneal1.pt", action_space=27, history_len=7, save_path=None, num_steps=32, num_partition=20, size=256):
+    def __init__(self, x, label, model_path="./exp1/model_CosAnneal1.pt", action_space=27, history_len=7, save_path=None, num_steps=32, num_partition=20, size=256, run_name=None):
         self.x = x
         self.label = label
         self.best_reward = 0
@@ -54,6 +54,8 @@ class DREnv(Env):
         self.name = None
         self.best_name = None
         self.size = size
+
+        self.run_name = run_name
 
         self.count = 0
         self.current_state = None
@@ -73,6 +75,8 @@ class DREnv(Env):
         ).cuda()
         self.model.load_state_dict(torch.load(model_path))
         print("human surrogate params: ", sum([p.numel() for p in self.model.parameters()]))
+        with open("./runs/{}/println.txt".format(self.run_name), 'a') as f:
+            print("human surrogate params: ", sum([p.numel() for p in self.model.parameters()]), file=f)
         self.model.train()
 
         # actions
@@ -224,6 +228,8 @@ class DREnv(Env):
 
             name = "iter{}_step{}".format(self.iteration, self.step)
             print("\n\n{} fit-transforming...".format(name))
+            with open("./runs/{}/println.txt".format(self.run_name), 'a') as f:
+                print("\n\n{} fit-transforming...".format(name), file=f)
 
             t1 = time.time()
             z0 = self.reducer.fit_transform(
@@ -234,6 +240,8 @@ class DREnv(Env):
             )
             t2 = time.time()
             print("time used for fit-transform: {} s".format(t2-t1))
+            with open("./runs/{}/println.txt".format(self.run_name), 'a') as f:
+                print("time used for fit-transform: {} s".format(t2-t1), file=f)
 
             # features = np.zeros((5, 1))
             # print("Please refer to image {}.".format(os.path.join(self.save_path, name)))
@@ -303,6 +311,8 @@ class DREnv(Env):
                 self.best_reward = r1+r2
 
             print("\nr1: {}, r2:{}\n".format(r1, r2))
+            with open("./runs/{}/println.txt".format(self.run_name), 'a') as f:
+                print("\nr1: {}, r2:{}\n".format(r1, r2), file=f)   
 
             plt.cla()
             draw_z(

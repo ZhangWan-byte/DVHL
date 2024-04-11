@@ -448,7 +448,7 @@ if __name__ == "__main__":
     # data, labels = data[idx], labels[idx]
 
     print("data: {}, labels: {}".format(data.shape, labels.shape))
-    with open("runs/{}/println.txt".format(run_name), 'a') as f:
+    with open("./runs/{}/println.txt".format(run_name), 'a') as f:
         print("data: {}, labels: {}".format(data.shape, labels.shape), file=f)
     envs = DREnv(
         data.astype('float32'), 
@@ -456,9 +456,10 @@ if __name__ == "__main__":
         model_path="./exp1/model_dropout.pt",  
         action_space=27, 
         history_len=7, 
-        save_path=f"runs/{run_name}", 
+        save_path=f"./runs/{run_name}", 
         num_steps = args.num_steps, 
-        num_partition=num_partition
+        num_partition=num_partition, 
+        run_name=run_name
     )
 
     agent = Agent(envs, num_node_features=data.shape[1], hidden=32, history_len=7, num_actions=27, num_partition=num_partition).to(device)
@@ -466,7 +467,7 @@ if __name__ == "__main__":
 
     print("actor params: {}".format(sum([p.numel() for p in agent.actor.parameters()])))
     print("critic params: {}".format(sum([p.numel() for p in agent.critic.parameters()])))
-    with open("runs/{}/println.txt".format(run_name), 'a') as f:
+    with open("./runs/{}/println.txt".format(run_name), 'a') as f:
         print("actor params: {}".format(sum([p.numel() for p in agent.actor.parameters()])), file=f)
         print("critic params: {}".format(sum([p.numel() for p in agent.critic.parameters()])), file=f)
 
@@ -554,12 +555,12 @@ if __name__ == "__main__":
             print("\nhistory_len:{}\nhistory_rewards:{}\nhistory_actions:{}\nreward:{}\nnext_done:{}".format(
                 envs.history_len, envs.history_rewards, envs.history_actions, reward, 
                 next_done.detach().cpu().item()))
-            with open("runs/{}/println.txt".format(run_name), 'a') as f:
+            with open("./runs/{}/println.txt".format(run_name), 'a') as f:
                 print("\nhistory_len:{}\nhistory_rewards:{}\nhistory_actions:{}\nreward:{}\nnext_done:{}".format(
                 envs.history_len, envs.history_rewards, envs.history_actions, reward, 
                 next_done.detach().cpu().item()), file=f)
             print("best: {}".format(envs.best_name))
-            with open("runs/{}/println.txt".format(run_name), 'a') as f:
+            with open("./runs/{}/println.txt".format(run_name), 'a') as f:
                 print("best: {}".format(envs.best_name), file=f)
 
             if "final_info" in infos:
@@ -612,12 +613,12 @@ if __name__ == "__main__":
 
                 _, newlogprob, entropy, newvalue = agent.get_action_and_value(b_obs_i, b_actions_i, partition=partition)
                 print("newlogprob: {}, b_logprobs[mb_inds]: {}, mb_inds: {}".format(newlogprob, b_logprobs[mb_inds], mb_inds))
-                with open("runs/{}/println.txt".format(run_name), 'a') as f:
+                with open("./runs/{}/println.txt".format(run_name), 'a') as f:
                     print("newlogprob: {}, b_logprobs[mb_inds]: {}, mb_inds: {}".format(newlogprob, b_logprobs[mb_inds], mb_inds), file=f)
                 logratio = newlogprob - b_logprobs[mb_inds]
                 ratio = logratio.exp()
                 print("logratio: ", logratio)
-                with open("runs/{}/println.txt".format(run_name), 'a') as f:
+                with open("./runs/{}/println.txt".format(run_name), 'a') as f:
                     print("logratio: ", logratio, file=f)
                 
                 with torch.no_grad():
@@ -628,12 +629,12 @@ if __name__ == "__main__":
 
                 mb_advantages = b_advantages[mb_inds]
                 print("mb_advantages: ", mb_advantages)
-                with open("runs/{}/println.txt".format(run_name), 'a') as f:
+                with open("./runs/{}/println.txt".format(run_name), 'a') as f:
                     print("mb_advantages: ", mb_advantages, file=f)
                 if args.norm_adv:
                     mb_advantages = (mb_advantages - mb_advantages.mean(dim=0)) / (mb_advantages.std(dim=0) + 1e-8)
                 print("mb_advantages, ratio: ", mb_advantages, ratio)
-                with open("runs/{}/println.txt".format(run_name), 'a') as f:
+                with open("./runs/{}/println.txt".format(run_name), 'a') as f:
                     print("mb_advantages, ratio: ", mb_advantages, ratio, file=f)
                 # Policy loss
                 pg_loss1 = -mb_advantages * ratio
@@ -659,7 +660,7 @@ if __name__ == "__main__":
                 # print("sub-loss shapes", pg_loss.shape, entropy_loss.shape, v_loss.shape) # (20,) (20,) (20,)
                 loss = pg_loss - args.ent_coef * entropy_loss + args.vf_coef * v_loss
                 print("loss: ", loss, pg_loss, entropy_loss, v_loss)
-                with open("runs/{}/println.txt".format(run_name), 'a') as f:
+                with open("./runs/{}/println.txt".format(run_name), 'a') as f:
                     print("loss: ", loss, pg_loss, entropy_loss, v_loss, file=f)
                 optimizer.zero_grad()
                 loss.mean().backward()
@@ -683,13 +684,13 @@ if __name__ == "__main__":
         writer.add_scalar("losses/clipfrac", np.mean(clipfracs), global_step)
         writer.add_scalar("losses/explained_variance", explained_var, global_step)
         print("SPS:", int(global_step / (time.time() - start_time)))
-        with open("runs/{}/println.txt".format(run_name), 'a') as f:
+        with open("./runs/{}/println.txt".format(run_name), 'a') as f:
             print("SPS:", int(global_step / (time.time() - start_time)), file=f)
         writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
 
-        torch.save(agent.state_dict(), "runs/{}/agent.pt".format(run_name))
-        torch.save(envs.history_rewards, "runs/{}/history_rewards.pt".format(run_name))
-        torch.save(envs.history_actions, "runs/{}/history_actions.pt".format(run_name))
+        torch.save(agent.state_dict(), "./runs/{}/agent.pt".format(run_name))
+        torch.save(envs.history_rewards, "./runs/{}/history_rewards.pt".format(run_name))
+        torch.save(envs.history_actions, "./runs/{}/history_actions.pt".format(run_name))
     
     envs.close()
     writer.close()
