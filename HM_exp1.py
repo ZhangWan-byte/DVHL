@@ -56,7 +56,7 @@ def flip(z):
 
 
 class PairPrefDataset(Dataset):
-    def __init__(self, names, path="./exp1/data_augmented_v1/", size=256):
+    def __init__(self, names, path="./exp1/data_augmented_v1/", size=100):
         
         self.names = names
         self.path = path
@@ -102,13 +102,13 @@ test_names = names[int(len(names)*0.8):]
 
 with open('./exp1_v2/out_{}.txt'.format(cur_time), 'a') as f:
     print("processing train_dataset...", file=f)
-train_dataset = PairPrefDataset(train_names, path="./exp1/data_augmented_v1/", size=256)
+train_dataset = PairPrefDataset(train_names, path="./exp1/data_augmented_v1/", size=100)
 z1, z2, y = train_dataset[0]
 print("train: ", z1.shape, z2.shape, y)
 
 with open('./exp1_v2/out_{}.txt'.format(cur_time), 'a') as f:
     print("processing test_dataset...", file=f)
-test_dataset = PairPrefDataset(test_names, path="./exp1/data_augmented_v1/", size=256)
+test_dataset = PairPrefDataset(test_names, path="./exp1/data_augmented_v1/", size=100)
 z1, z2, y = test_dataset[0]
 print("test: ", z1.shape, z2.shape, y)
 
