@@ -17,7 +17,7 @@ from torch.utils.tensorboard import SummaryWriter
 from torch_geometric.nn import GCNConv, GATv2Conv, TopKPooling
 from torch.nn import MultiheadAttention
 
-from annoy import AnnoyIndex
+# from annoy import AnnoyIndex
 from myPaCMAP import distance_to_option
 from env import DREnv
 
@@ -134,33 +134,33 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
     return layer
 
 
-def get_scaledKNN(X, _RANDOM_STATE=None):
-    n, dim = X.shape
-    # sample more neighbors than needed
-    n_neighbors_extra = min(n_neighbors + 50, n - 1)
-    tree = AnnoyIndex(dim, metric=distance)
-    if _RANDOM_STATE is not None:
-        tree.set_seed(_RANDOM_STATE)
-    for i in range(n):
-        tree.add_item(i, X[i, :])
-    tree.build(20)
+# def get_scaledKNN(X, _RANDOM_STATE=None):
+#     n, dim = X.shape
+#     # sample more neighbors than needed
+#     n_neighbors_extra = min(n_neighbors + 50, n - 1)
+#     tree = AnnoyIndex(dim, metric=distance)
+#     if _RANDOM_STATE is not None:
+#         tree.set_seed(_RANDOM_STATE)
+#     for i in range(n):
+#         tree.add_item(i, X[i, :])
+#     tree.build(20)
 
-    option = distance_to_option(distance=distance)
+#     option = distance_to_option(distance=distance)
 
-    nbrs = np.zeros((n, n_neighbors_extra), dtype=np.int32)
-    knn_distances = np.empty((n, n_neighbors_extra), dtype=np.float32)
+#     nbrs = np.zeros((n, n_neighbors_extra), dtype=np.int32)
+#     knn_distances = np.empty((n, n_neighbors_extra), dtype=np.float32)
 
-    for i in range(n):
-        nbrs_ = tree.get_nns_by_item(i, n_neighbors_extra + 1)
-        nbrs[i, :] = nbrs_[1:]
-        for j in range(n_neighbors_extra):
-            knn_distances[i, j] = tree.get_distance(i, nbrs[i, j])
-    print_verbose("Found nearest neighbor", verbose)
-    sig = np.maximum(np.mean(knn_distances[:, 3:6], axis=1), 1e-10)
-    print_verbose("Calculated sigma", verbose)
-    scaled_dist = scale_dist(knn_distances, sig, nbrs)
+#     for i in range(n):
+#         nbrs_ = tree.get_nns_by_item(i, n_neighbors_extra + 1)
+#         nbrs[i, :] = nbrs_[1:]
+#         for j in range(n_neighbors_extra):
+#             knn_distances[i, j] = tree.get_distance(i, nbrs[i, j])
+#     print_verbose("Found nearest neighbor", verbose)
+#     sig = np.maximum(np.mean(knn_distances[:, 3:6], axis=1), 1e-10)
+#     print_verbose("Calculated sigma", verbose)
+#     scaled_dist = scale_dist(knn_distances, sig, nbrs)
 
-    return scaled_dist
+#     return scaled_dist
 
 class GAT(torch.nn.Module):
     def __init__(self, num_node_features=50, hidden=32, num_actions=27, out_dim=1, std=1.0, history_len=7, num_partition=20, device=torch.device('cuda' if torch.cuda.is_available() else 'cpu')):
