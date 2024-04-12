@@ -1,4 +1,5 @@
 # docs and experiment results can be found at https://docs.cleanrl.dev/rl-algorithms/ppo/#ppopy
+import gc
 import os
 import random
 import time
@@ -692,5 +693,8 @@ if __name__ == "__main__":
         torch.save(envs.history_rewards, "./runs/{}/history_rewards.pt".format(run_name))
         torch.save(envs.history_actions, "./runs/{}/history_actions.pt".format(run_name))
     
+        torch.cuda.empty_cache()
+        gc.collect()
+
     envs.close()
     writer.close()
