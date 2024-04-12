@@ -35,6 +35,8 @@ import torchvision.transforms as transforms
 from torch.autograd import Variable
 from torchvision.utils import save_image
 
+# from memory_profiler import profile
+
 @dataclass
 class Args:
     run_name: str = ""
@@ -365,7 +367,6 @@ class Agent(nn.Module):
             
             return action, probs.log_prob(action), probs.entropy(), self.critic(state, partition)
 
-
 def get_partition(data, k=20, labels=None):
     if labels==None:
         kms = KMeans(n_clusters=k).fit(data)
@@ -384,7 +385,8 @@ def get_partition(data, k=20, labels=None):
         exit()
 
 
-if __name__ == "__main__":
+# @profile
+def main():
     args = tyro.cli(Args)
     args.batch_size = int(args.num_envs * args.num_steps)                   # 1 * 32
     args.minibatch_size = int(args.batch_size // args.num_minibatches)      # 32 // 8 = 4
@@ -546,6 +548,9 @@ if __name__ == "__main__":
             actions[step] = action.view(-1,1)
             logprobs[step] = logprob.view(-1,1)
 
+            torch.cuda.empty_cache()
+            gc.collect()
+
             # TRY NOT TO MODIFY: execute the game and log data.
             next_obs, reward, terminations, truncations, infos = envs.next_step(action.cpu(), iteration, step, partition)
             # next_done = np.logical_or(terminations, truncations)
@@ -698,3 +703,8 @@ if __name__ == "__main__":
 
     envs.close()
     writer.close()
+
+
+
+if __name__ == "__main__":
+    main()

@@ -14,6 +14,8 @@ from myPaCMAP import *
 import itertools
 import time
 
+# from memory_profiler import profile
+
 # human surrogate
 class SiameseNet(nn.Module):
     def __init__(self, hidden, block, num_block, in_channels, out_channels=[10, 16, 32, 64], num_classes=16):
@@ -175,7 +177,6 @@ class DREnv(Env):
 
         return state
 
-
     def heuristic(self, out_mean, out_var, mode=2, t1=0.02, t2=0.5):
 
         if mode==0:
@@ -211,7 +212,6 @@ class DREnv(Env):
             exit()
 
         return r
-
 
     def obtain_reward(self, state):
         with torch.no_grad():
@@ -310,9 +310,9 @@ class DREnv(Env):
                 self.best_name = name
                 self.best_reward = r1+r2
 
-            print("\nr1: {}, r2:{}\n".format(r1, r2))
+            print("\nr1: {}, r2: {}\n".format(r1, r2))
             with open("./runs/{}/println.txt".format(self.run_name), 'a') as f:
-                print("\nr1: {}, r2:{}\n".format(r1, r2), file=f)   
+                print("\nr1: {}, r2: {}\n".format(r1, r2), file=f)   
 
             plt.cla()
             draw_z(
@@ -326,7 +326,6 @@ class DREnv(Env):
             )
 
             return r1 + r2
-
 
     def transition(self, action, partition):
         """
@@ -371,7 +370,6 @@ class DREnv(Env):
         state = self.obtain_state(self.x, self.label, n_neighbors, MN_ratio, FP_ratio, initial=False)
 
         return state, reward
-
 
     def next_step(self, action, iteration, step, partition):
         self.count = self.count + 1
