@@ -118,7 +118,7 @@ class DREnv(Env):
         """
         if initial==True:
 
-            n_neighbors = 15 #None
+            n_neighbors = np.ones(x.shape[0]) * 15 #None
             MN_ratio = np.ones(x.shape[0]) * 2.0 # 0.5
             FP_ratio = np.ones(x.shape[0]) * 20.0 # 2.0
 
