@@ -137,7 +137,7 @@ def gauss_clusters(
     return X, y
 
 
-def layer_init(layer, std=np.sqrt(2), bias_const=0.0, jianhong_advice=True):
+def layer_init(layer, std=np.sqrt(2), bias_const=0.0, jianhong_advice=False):
     
     if jianhong_advice==False:
         torch.nn.init.orthogonal_(layer.weight, std)
@@ -178,7 +178,7 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0, jianhong_advice=True):
 #     return scaled_dist
 
 class GAT(torch.nn.Module):
-    def __init__(self, num_node_features=50, hidden=32, num_actions=27, out_dim=1, std=1.0, history_len=7, num_partition=20, device=torch.device('cuda' if torch.cuda.is_available() else 'cpu')):
+    def __init__(self, num_node_features=50, hidden=32, num_actions=27, out_dim=1, std=1.0, history_len=7, num_partition=20, device=torch.device('cuda' if torch.cuda.is_available() else 'cpu'), jianhong_advice=False):
         super().__init__()
         self.hidden = hidden
         self.num_actions = num_actions
@@ -198,25 +198,25 @@ class GAT(torch.nn.Module):
         # history feature
         # self.gru = nn.GRU(input_size=num_actions+2, hidden_size=hidden, num_layers=1)
         self.history_mlp = nn.Sequential(
-            layer_init(nn.Linear(in_features=history_len*num_partition+1, out_features=hidden), std=std, jianhong_advice=args.jianhong_advice),
+            layer_init(nn.Linear(in_features=history_len*num_partition+1, out_features=hidden), std=std, jianhong_advice=jianhong_advice),
             nn.LeakyReLU(),
             nn.Dropout(p=0.5), 
-            layer_init(nn.Linear(in_features=hidden, out_features=hidden), std=std, jianhong_advice=args.jianhong_advice),
+            layer_init(nn.Linear(in_features=hidden, out_features=hidden), std=std, jianhong_advice=jianhong_advice),
             nn.LeakyReLU(), 
             nn.Dropout(p=0.5), 
-            layer_init(nn.Linear(in_features=hidden, out_features=hidden), std=std, jianhong_advice=args.jianhong_advice),
+            layer_init(nn.Linear(in_features=hidden, out_features=hidden), std=std, jianhong_advice=jianhong_advice),
         )
 
         # prediction head
         # head_out_dim = num_partition * self.out_dim if self.actor==1 else 1
         self.head = nn.Sequential(
-            layer_init(nn.Linear(in_features=hidden*(num_partition+1), out_features=hidden), std=std, jianhong_advice=args.jianhong_advice), 
+            layer_init(nn.Linear(in_features=hidden*(num_partition+1), out_features=hidden), std=std, jianhong_advice=jianhong_advice), 
             nn.LeakyReLU(), 
             nn.Dropout(p=0.5), 
-            layer_init(nn.Linear(in_features=hidden, out_features=hidden), std=std, jianhong_advice=args.jianhong_advice), 
+            layer_init(nn.Linear(in_features=hidden, out_features=hidden), std=std, jianhong_advice=jianhong_advice), 
             nn.LeakyReLU(), 
             nn.Dropout(p=0.5), 
-            layer_init(nn.Linear(in_features=hidden, out_features=num_partition * self.out_dim), std=std, jianhong_advice=args.jianhong_advice)       # TODO
+            layer_init(nn.Linear(in_features=hidden, out_features=num_partition * self.out_dim), std=std, jianhong_advice=jianhong_advice)       # TODO
         )
 
     def forward(self, state, partition=None):
