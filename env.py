@@ -96,10 +96,13 @@ class DREnv(Env):
         self.best_z0 = None
         self.last_z = None
 
+        # record during training
+        self.best_epoch_reward = 0
+        self.history_rewards = torch.tensor([])
+
         # history: actions / effect
         self.history_len = history_len
         self.history_actions = torch.zeros((history_len, self.num_partition))
-        self.history_rewards = torch.tensor([])
         self.effect_history_actions = torch.zeros(1)
 
         # like a sentence, abcdefg0 / fdsjkhy1, each character is one_hot

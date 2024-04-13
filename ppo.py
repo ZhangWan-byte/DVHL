@@ -702,6 +702,9 @@ def main():
             print("SPS:", int(global_step / (time.time() - start_time)), file=f)
         writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
 
+        if torch.sum(envs.history_rewards[-args.num_steps:]) >= envs.best_epoch_reward:
+            torch.save(agent.state_dict(), "./runs/{}/best_epoch_agent.pt".format(run_name))
+            envs.best_epoch_reward = torch.sum(envs.history_rewards[-args.num_steps:])
         torch.save(agent.state_dict(), "./runs/{}/agent.pt".format(run_name))
         torch.save(envs.history_rewards, "./runs/{}/history_rewards.pt".format(run_name))
         torch.save(envs.history_actions, "./runs/{}/history_actions.pt".format(run_name))
