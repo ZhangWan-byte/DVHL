@@ -172,14 +172,14 @@ class Ensemble(nn.Module):
 #     device=torch.device('cuda')
 # )
 
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model = SiameseNet(
     hidden=64, 
     block=BasicBlock, 
     num_block=[2,2,2,2], #[1,1,1,1],  
     in_channels=1, 
-    out_channels=[10, 16, 24, 32], 
-    device=torch.device('cuda')
-)
+    out_channels=[10, 16, 24, 32]
+).to(device)
 print("model params: {}".format(sum([p.numel() for p in model.parameters()])))
 with open('./exp1_v2/out_{}.txt'.format(cur_time), 'a') as f:
     print("model params: {}".format(sum([p.numel() for p in model.parameters()])), file=f)
