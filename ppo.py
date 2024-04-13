@@ -106,6 +106,9 @@ class Args:
     num_iterations: int = 0
     """the number of iterations (computed in runtime)"""
 
+    jianhong_advice: bool = True
+    """+ norm init / + reward norm / - norm_adv=False / - clip_vloss=False"""
+
 
 def gauss_clusters(
     n_clusters=10, dim=10, pts_cluster=100, random_state=None, cov=1, stepsize=1,
@@ -134,9 +137,15 @@ def gauss_clusters(
     return X, y
 
 
-def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
-    torch.nn.init.orthogonal_(layer.weight, std)
+def layer_init(layer, std=np.sqrt(2), bias_const=0.0, jianhong_advice=True):
+    
+    if jianhong_advice==False:
+        torch.nn.init.orthogonal_(layer.weight, std)
+    else:
+        torch.nn.init.normal_(layer.weight, 0.05)
+
     torch.nn.init.constant_(layer.bias, bias_const)
+
     return layer
 
 
@@ -189,25 +198,25 @@ class GAT(torch.nn.Module):
         # history feature
         # self.gru = nn.GRU(input_size=num_actions+2, hidden_size=hidden, num_layers=1)
         self.history_mlp = nn.Sequential(
-            layer_init(nn.Linear(in_features=history_len*num_partition+1, out_features=hidden)),
+            layer_init(nn.Linear(in_features=history_len*num_partition+1, out_features=hidden), std=std, jianhong_advice=args.jianhong_advice),
             nn.LeakyReLU(),
             nn.Dropout(p=0.5), 
-            layer_init(nn.Linear(in_features=hidden, out_features=hidden), std=std),
+            layer_init(nn.Linear(in_features=hidden, out_features=hidden), std=std, jianhong_advice=args.jianhong_advice),
             nn.LeakyReLU(), 
             nn.Dropout(p=0.5), 
-            layer_init(nn.Linear(in_features=hidden, out_features=hidden), std=std),
+            layer_init(nn.Linear(in_features=hidden, out_features=hidden), std=std, jianhong_advice=args.jianhong_advice),
         )
 
         # prediction head
         # head_out_dim = num_partition * self.out_dim if self.actor==1 else 1
         self.head = nn.Sequential(
-            layer_init(nn.Linear(in_features=hidden*(num_partition+1), out_features=hidden)), 
+            layer_init(nn.Linear(in_features=hidden*(num_partition+1), out_features=hidden), std=std, jianhong_advice=args.jianhong_advice), 
             nn.LeakyReLU(), 
             nn.Dropout(p=0.5), 
-            layer_init(nn.Linear(in_features=hidden, out_features=hidden), std=std), 
+            layer_init(nn.Linear(in_features=hidden, out_features=hidden), std=std, jianhong_advice=args.jianhong_advice), 
             nn.LeakyReLU(), 
             nn.Dropout(p=0.5), 
-            layer_init(nn.Linear(in_features=hidden, out_features=num_partition * self.out_dim), std=std)       # TODO
+            layer_init(nn.Linear(in_features=hidden, out_features=num_partition * self.out_dim), std=std, jianhong_advice=args.jianhong_advice)       # TODO
         )
 
     def forward(self, state, partition=None):
@@ -400,6 +409,9 @@ def main():
     args.minibatch_size = int(args.batch_size // args.num_minibatches)      # 32 // 8 = 4
     args.num_iterations = args.total_timesteps // args.batch_size           # [3200/32]=100
     
+    args.norm_adv = False
+    args.clip_vloss = False
+
     if args.run_name=="":
         run_name = f"{args.env_id}__{args.exp_name}__{time.strftime('%m%d%H%M%S', time.localtime())}__{args.seed}"
     else:
@@ -586,6 +598,8 @@ def main():
 
             # all_rewards.append(reward)
             # all_actions.append(envs.history_actions[-1])
+
+        rewards = (rewards - rewards.mean(dim=0)) / (reawrds.std(dim=0) + 1e-8)
 
         # bootstrap value if not done
         with torch.no_grad():
