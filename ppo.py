@@ -95,6 +95,9 @@ class Args:
     target_kl: float = None
     """the target KL divergence threshold"""
 
+    num_policy: int = 6
+    """the number of ensemble policies for actor-critic"""
+
     # to be filled in runtime
     batch_size: int = 0
     """the batch size (computed in runtime)"""
@@ -283,7 +286,7 @@ class PolicyEnsemble(nn.Module):
 
 
 class Agent(nn.Module):
-    def __init__(self, envs, num_node_features=50, hidden=64, history_len=7, num_actions=27, num_partition=None, device=torch.device('cuda' if torch.cuda.is_available() else 'cpu')):
+    def __init__(self, envs, num_policy=6, num_node_features=50, hidden=64, history_len=7, num_actions=27, num_partition=None, device=torch.device('cuda' if torch.cuda.is_available() else 'cpu'), actor_path=None, critic_path=None):
         super().__init__()
 
         # self.critic = GAT(
@@ -305,7 +308,7 @@ class Agent(nn.Module):
         #     num_partition=num_partition
         # )
         self.critic = PolicyEnsemble(
-            num_models=6, 
+            num_models=num_policy, 
             num_node_features=num_node_features, 
             hidden=hidden, 
             num_actions=num_actions, 
@@ -316,7 +319,7 @@ class Agent(nn.Module):
             device=device
         )
         self.actor = PolicyEnsemble(
-            num_models=6, 
+            num_models=num_policy, 
             num_node_features=num_node_features, 
             hidden=hidden, 
             num_actions=num_actions, 
@@ -326,6 +329,11 @@ class Agent(nn.Module):
             num_partition=num_partition, 
             device=device
         )
+        if critic_path is not None:
+            self.critic.load_state_dict(torch.load(critic_path))
+        if actor_path is not None:
+            self.actor.load_state_dict(torch.load(actor_path))
+
         self.device = device
 
     def get_value(self, state, partition=None):
@@ -465,7 +473,7 @@ def main():
         run_name=run_name
     )
 
-    agent = Agent(envs, num_node_features=data.shape[1], hidden=32, history_len=7, num_actions=27, num_partition=num_partition).to(device)
+    agent = Agent(envs, num_policy=args.num_policy, num_node_features=data.shape[1], hidden=32, history_len=7, num_actions=27, num_partition=num_partition).to(device)
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
     print("actor params: {}".format(sum([p.numel() for p in agent.actor.parameters()])))

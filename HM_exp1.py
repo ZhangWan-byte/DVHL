@@ -113,14 +113,14 @@ z1, z2, y = test_dataset[0]
 print("test: ", z1.shape, z2.shape, y)
 
 class SiameseNet(nn.Module):
-    def __init__(self, hidden, block, num_block, in_channels, out_channels=[10, 16, 32, 64]):
+    def __init__(self, hidden, block, num_block, in_channels, out_channels=[10, 16, 24, 32]):
         super().__init__()
         self.cnn = ResNet(
             block=BasicBlock, 
-            num_block=[1,1,1,1], 
+            num_block=num_block, 
             num_classes=hidden, 
             in_channels=1, 
-            out_channels=[10, 16, 24, 32])
+            out_channels=out_channels)
 
         self.hidden = hidden
 
@@ -162,8 +162,17 @@ class Ensemble(nn.Module):
         results = torch.vstack(results).mean(dim=0)
         return results
 
-model = Ensemble(
-    num_models=6,
+# model = Ensemble(
+#     num_models=6,
+#     hidden=64, 
+#     block=BasicBlock, 
+#     num_block=[2,2,2,2], #[1,1,1,1],  
+#     in_channels=1, 
+#     out_channels=[10, 16, 24, 32], 
+#     device=torch.device('cuda')
+# )
+
+model = SiameseNet(
     hidden=64, 
     block=BasicBlock, 
     num_block=[2,2,2,2], #[1,1,1,1],  
@@ -171,14 +180,14 @@ model = Ensemble(
     out_channels=[10, 16, 24, 32], 
     device=torch.device('cuda')
 )
-print("ensemble params: {}".format(sum([p.numel() for p in model.parameters()])))
+print("model params: {}".format(sum([p.numel() for p in model.parameters()])))
 with open('./exp1_v2/out_{}.txt'.format(cur_time), 'a') as f:
-    print("ensemble params: {}".format(sum([p.numel() for p in model.parameters()])), file=f)
+    print("model params: {}".format(sum([p.numel() for p in model.parameters()])), file=f)
 
 criterion = nn.BCELoss()
 
-epochs = 10
-batch_size = 64
+epochs = 100
+batch_size = 128
 
 optimizer = optim.Adam(model.parameters(), lr=3e-4)
 # scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=2, T_mult=0.8)
