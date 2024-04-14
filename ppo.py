@@ -106,7 +106,7 @@ class Args:
     num_iterations: int = 0
     """the number of iterations (computed in runtime)"""
 
-    jianhong_advice: bool = True
+    jianhong_advice: bool = False
     """+ norm init / + reward norm / - norm_adv=False / - clip_vloss=False"""
 
 
@@ -409,8 +409,9 @@ def main():
     args.minibatch_size = int(args.batch_size // args.num_minibatches)      # 32 // 8 = 4
     args.num_iterations = args.total_timesteps // args.batch_size           # [3200/32]=100
     
-    args.norm_adv = False
-    args.clip_vloss = False
+    if args.jianhong_advice==True:
+        args.norm_adv = False
+        args.clip_vloss = False
 
     if args.run_name=="":
         run_name = f"{args.env_id}__{args.exp_name}__{time.strftime('%m%d%H%M%S', time.localtime())}__{args.seed}"
@@ -599,7 +600,8 @@ def main():
             # all_rewards.append(reward)
             # all_actions.append(envs.history_actions[-1])
 
-        rewards = (rewards - rewards.mean(dim=0)) / (reawrds.std(dim=0) + 1e-8)
+        if args.jianhong_advice==True:
+            rewards = (rewards - rewards.mean(dim=0)) / (rewards.std(dim=0) + 1e-8)
 
         # bootstrap value if not done
         with torch.no_grad():
