@@ -544,7 +544,7 @@ def main():
                 # handle accident or illegal situation
                 while True:
                     action, logprob, _, value = agent.get_action_and_value(next_obs, partition=partition)
-                    hp = envs.combinations[action.cpu() % len(envs.combinations)]
+                    hp = envs.combinations[action.detach().cpu() % len(envs.combinations)]
                     alpha, beta, gamma = hp[:, 0], hp[:, 1], hp[:, 2]
 
                     alpha = {k:alpha[k] for k in range(len(alpha))}
@@ -573,7 +573,7 @@ def main():
             gc.collect()
 
             # TRY NOT TO MODIFY: execute the game and log data.
-            next_obs, reward, terminations, truncations, infos = envs.next_step(action.cpu(), iteration, step, partition)
+            next_obs, reward, terminations, truncations, infos = envs.next_step(action.detach().cpu(), iteration, step, partition)
             # next_done = np.logical_or(terminations, truncations)
             rewards[step] = torch.tensor(reward).to(device).view(-1)
             # next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(next_done).to(device)
@@ -655,7 +655,7 @@ def main():
                     # calculate approx_kl http://joschu.net/blog/kl-approx.html
                     old_approx_kl = (-logratio).mean(dim=0)
                     approx_kl = ((ratio - 1) - logratio).mean(dim=0)
-                    clipfracs += [((ratio - 1.0).abs() > args.clip_coef).float().mean(dim=0).cpu().numpy()]
+                    clipfracs += [((ratio - 1.0).abs() > args.clip_coef).float().mean(dim=0).detach().cpu().numpy()]
 
                 mb_advantages = b_advantages[mb_inds]
                 print("mb_advantages: ", mb_advantages)
@@ -700,7 +700,7 @@ def main():
             if args.target_kl is not None and approx_kl > args.target_kl:
                 break
 
-        y_pred, y_true = b_values.cpu().numpy(), b_returns.cpu().numpy()
+        y_pred, y_true = b_values.detach().cpu().numpy(), b_returns.detach().cpu().numpy()
         var_y = np.var(y_true)
         explained_var = np.nan if var_y == 0 else 1 - np.var(y_true - y_pred) / var_y
 

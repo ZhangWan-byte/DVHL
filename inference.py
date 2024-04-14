@@ -1,11 +1,18 @@
+import os
+import gc
+import tyro
+import time
+import random
+import numpy as np
+from dataclasses import dataclass
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
 from torch.distributions.categorical import Categorical
 
-from ppo import PolicyEnsemble
-from models import SiameseNet
+from ppo import *
+from env import *
 
 
 @dataclass
@@ -17,6 +24,8 @@ class Args:
     """the name of this experiment"""
     seed: int = 3407
     """seed of the experiment"""
+    cuda: bool = True
+    """if toggled, cuda will be enabled by default"""
     num_envs: int = 1
     """number of environments"""
     actor_path: str = ""
@@ -27,6 +36,8 @@ class Args:
     """the id of the environment"""
     num_steps: int = 100
     """number of rollout steps"""
+    num_policy: int = 6
+    """number of policies"""
     learning_rate: float = 2.5e-4
     """the learning rate of the optimizer"""
     search: str = "sampling" # greedy / sampling / beam / eas-lay
@@ -58,10 +69,11 @@ class InferenceAgent(nn.Module):
 
         if search_type=='sampling':
             probs = Categorical(logits=logits)
-            action = probs.sample().item()
+            print("logits: {}".format(logits.detach().cpu()))
+            action = probs.sample()
         
         elif search_type=='greedy':
-            action = torch.argmax(logits.view(-1)).item()
+            action = torch.argmax(logits, dim=1)
 
         elif search_type=='beam':
             pass
@@ -84,11 +96,13 @@ def main():
     else:
         run_name = args.run_name
 
+    os.makedirs(f"runs/{run_name}/", exist_ok=True)
+
     # TRY NOT TO MODIFY: seeding
     random.seed(args.seed)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
-    torch.backends.cudnn.deterministic = args.torch_deterministic
+    torch.backends.cudnn.deterministic = False
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
@@ -146,25 +160,16 @@ def main():
     # optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
     next_obs = envs.reset()
-    next_done = torch.zeros(args.num_envs).to(device)
-
-    obs = []
-    actions = torch.zeros((args.num_steps, num_partition, args.num_envs)).to(device)
-    logprobs = torch.zeros((args.num_steps, num_partition, args.num_envs)).to(device)
-    values = torch.zeros((args.num_steps, num_partition, args.num_envs)).to(device)
-    rewards = torch.zeros((args.num_steps, args.num_envs)).to(device)
-    dones = torch.zeros((args.num_steps, args.num_envs)).to(device)
+    actions = []
 
     for i in range(args.num_steps):
         
-        obs.append(next_obs)
-        dones[step] = next_done
-
         with torch.no_grad():
 
             # handle accident or illegal situation
             while True:
-                action, logprob, _, value = agent.get_action_and_value(next_obs, partition=partition)
+                action = agent.search(next_obs, partition=partition, search_type=args.search)
+                print("step-{}: {}".format(i, action.detach().cpu()))
                 hp = envs.combinations[action.cpu() % len(envs.combinations)]
                 alpha, beta, gamma = hp[:, 0], hp[:, 1], hp[:, 2]
 
@@ -186,6 +191,18 @@ def main():
                 else:
                     break
 
+        torch.cuda.empty_cache()
+        gc.collect()
+
+        actions.append(action.detach().cpu())
+
+        # TRY NOT TO MODIFY: execute the game and log data.
+        next_obs, _, terminations, truncations, infos = envs.next_step(action.detach().cpu(), 1, i, partition)
+
+        # r1 = float(input('do you think this visualisation is better than the previous one?'))
+        # r2 = float(input('do you '))
+
+    torch.save(torch.stack(actions, dim=0), f"./runs/{run_name}/actions.pt")
 
 
 if __name__=="__main__":

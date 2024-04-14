@@ -352,25 +352,25 @@ class DREnv(Env):
         MN_ratio = beta * self.current_state["MN_ratio"]
         FP_ratio = gamma * self.current_state["FP_ratio"]
 
-        # 2. obtain reward
+        # 2. obtain state - others
+        state = self.obtain_state(self.x, self.label, n_neighbors, MN_ratio, FP_ratio, initial=False)
+
+        # 3. obtain reward
         reward = self.obtain_reward(self.current_state)
 
-        # 3. obtain history
-        # update history actions
-        self.history_actions = torch.vstack([self.history_actions, action])
+        # 4. obtain state - history
 
-        # update history rewards
-        self.history_rewards = torch.hstack([self.history_rewards, torch.tensor(reward)])
+        self.history_actions = torch.vstack([self.history_actions, action])                                     # update history actions
 
-        # add history info to state
-        if reward > self.history_rewards[max(-self.history_len, -len(self.history_rewards))]:
+        self.history_rewards = torch.hstack([self.history_rewards, torch.tensor(reward)])                       # update history rewards
+
+        if reward > self.history_rewards[max(-self.history_len, -len(self.history_rewards))]:                   # add history info to state
             self.effect_history_actions = torch.tensor([1])
         else:
             self.effect_history_actions = torch.tensor([0])
         self.history = [self.history_actions[-self.history_len:, :], self.effect_history_actions]
 
-        # 4. obtain state
-        state = self.obtain_state(self.x, self.label, n_neighbors, MN_ratio, FP_ratio, initial=False)
+        state["history"] = [i.to(self.device) for i in self.history]
 
         return state, reward
 
@@ -418,6 +418,17 @@ class DREnv(Env):
         )
         z = get_Ihat(normalise(z0), size=self.size)
         z = torch.from_numpy(z).view(1,1,self.size,self.size).float().cuda()
+
+        plt.cla()
+        draw_z(
+            z=normalise(z0), 
+            cls=self.label, #np.ones((z.shape[0], 1)), 
+            s=1, 
+            save_path=os.path.join(self.save_path, "initial"), 
+            display=False, 
+            title="initial", 
+            palette='Spectral' # None
+        )
 
         self.last_z = z
         self.best_z = z
