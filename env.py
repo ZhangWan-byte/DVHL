@@ -356,7 +356,7 @@ class DREnv(Env):
         state = self.obtain_state(self.x, self.label, n_neighbors, MN_ratio, FP_ratio, initial=False)
 
         # 3. obtain reward
-        reward = self.obtain_reward(self.current_state)
+        reward = self.obtain_reward(state)
 
         # 4. obtain state - history
 
