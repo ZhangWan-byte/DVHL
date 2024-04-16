@@ -299,7 +299,8 @@ class DREnv(Env):
             # update last and best vis
             self.last_z = z
             # if r1+r2 > self.best_reward:
-            if out2_mean>0.5 and out2_var<0.02:
+            # if out2_mean>0.5 and out2_var<0.02:
+            if r1>0 and r2>0:
                 self.best_z = z
                 self.best_z0 = z0
                 self.best_name = name
