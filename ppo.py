@@ -149,34 +149,6 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0, jianhong_advice=False):
     return layer
 
 
-# def get_scaledKNN(X, _RANDOM_STATE=None):
-#     n, dim = X.shape
-#     # sample more neighbors than needed
-#     n_neighbors_extra = min(n_neighbors + 50, n - 1)
-#     tree = AnnoyIndex(dim, metric=distance)
-#     if _RANDOM_STATE is not None:
-#         tree.set_seed(_RANDOM_STATE)
-#     for i in range(n):
-#         tree.add_item(i, X[i, :])
-#     tree.build(20)
-
-#     option = distance_to_option(distance=distance)
-
-#     nbrs = np.zeros((n, n_neighbors_extra), dtype=np.int32)
-#     knn_distances = np.empty((n, n_neighbors_extra), dtype=np.float32)
-
-#     for i in range(n):
-#         nbrs_ = tree.get_nns_by_item(i, n_neighbors_extra + 1)
-#         nbrs[i, :] = nbrs_[1:]
-#         for j in range(n_neighbors_extra):
-#             knn_distances[i, j] = tree.get_distance(i, nbrs[i, j])
-#     print_verbose("Found nearest neighbor", verbose)
-#     sig = np.maximum(np.mean(knn_distances[:, 3:6], axis=1), 1e-10)
-#     print_verbose("Calculated sigma", verbose)
-#     scaled_dist = scale_dist(knn_distances, sig, nbrs)
-
-#     return scaled_dist
-
 class GAT(torch.nn.Module):
     def __init__(self, num_node_features=50, hidden=32, num_actions=27, out_dim=1, std=1.0, history_len=7, num_partition=20, device=torch.device('cuda' if torch.cuda.is_available() else 'cpu'), jianhong_advice=False):
         super().__init__()
@@ -361,7 +333,7 @@ class Agent(nn.Module):
             value = []
             for i in range(len(state)):
                 logits = self.actor(state[i], partition)
-                print("logits: ", logits)
+                # print("logits: ", logits)
                 probs = Categorical(logits=logits)
                 if action is None:
                     action = probs.sample().view(-1)
@@ -377,7 +349,7 @@ class Agent(nn.Module):
             pbs = torch.vstack(pbs)
             ent = torch.vstack(ent)
             value = torch.vstack(value)
-            print("probs: ", pbs)
+            # print("probs: ", pbs)
             return ac, pbs, ent, value
         else:
             logits = self.actor(state, partition)
@@ -582,14 +554,14 @@ def main():
             # next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(next_done).to(device)
             next_done = torch.tensor(next_done).to(device)
 
-            print("\nhistory_len:{}\nhistory_rewards:{}\nhistory_actions:{}\nreward:{}\nnext_done:{}".format(
-                envs.history_len, envs.history_rewards, envs.history_actions, reward, 
-                next_done.detach().cpu().item()))
+            # print("\nhistory_len:{}\nhistory_rewards:{}\nhistory_actions:{}\nreward:{}\nnext_done:{}".format(
+            #     envs.history_len, envs.history_rewards, envs.history_actions, reward, 
+            #     next_done.detach().cpu().item()))
             with open("./runs/{}/println.txt".format(run_name), 'a') as f:
                 print("\nhistory_len:{}\nhistory_rewards:{}\nhistory_actions:{}\nreward:{}\nnext_done:{}".format(
                 envs.history_len, envs.history_rewards, envs.history_actions, reward, 
                 next_done.detach().cpu().item()), file=f)
-            print("best: {}".format(envs.best_name))
+            # print("best: {}".format(envs.best_name))
             with open("./runs/{}/println.txt".format(run_name), 'a') as f:
                 print("best: {}".format(envs.best_name), file=f)
 
@@ -602,6 +574,9 @@ def main():
 
             # all_rewards.append(reward)
             # all_actions.append(envs.history_actions[-1])
+
+        torch.cuda.empty_cache()
+        gc.collect()
 
         if args.jianhong_advice==True:
             rewards = (rewards - rewards.mean(dim=0)) / (rewards.std(dim=0) + 1e-8)
@@ -645,12 +620,12 @@ def main():
                 b_actions_i = b_actions.long()[mb_inds]
 
                 _, newlogprob, entropy, newvalue = agent.get_action_and_value(b_obs_i, b_actions_i, partition=partition)
-                print("newlogprob: {}, b_logprobs[mb_inds]: {}, mb_inds: {}".format(newlogprob, b_logprobs[mb_inds], mb_inds))
+                # print("newlogprob: {}, b_logprobs[mb_inds]: {}, mb_inds: {}".format(newlogprob, b_logprobs[mb_inds], mb_inds))
                 with open("./runs/{}/println.txt".format(run_name), 'a') as f:
                     print("newlogprob: {}, b_logprobs[mb_inds]: {}, mb_inds: {}".format(newlogprob, b_logprobs[mb_inds], mb_inds), file=f)
                 logratio = newlogprob - b_logprobs[mb_inds]
                 ratio = logratio.exp()
-                print("logratio: ", logratio)
+                # print("logratio: ", logratio)
                 with open("./runs/{}/println.txt".format(run_name), 'a') as f:
                     print("logratio: ", logratio, file=f)
                 
@@ -661,12 +636,12 @@ def main():
                     clipfracs += [((ratio - 1.0).abs() > args.clip_coef).float().mean(dim=0).detach().cpu().numpy()]
 
                 mb_advantages = b_advantages[mb_inds]
-                print("mb_advantages: ", mb_advantages)
+                # print("mb_advantages: ", mb_advantages)
                 with open("./runs/{}/println.txt".format(run_name), 'a') as f:
                     print("mb_advantages: ", mb_advantages, file=f)
                 if args.norm_adv:
                     mb_advantages = (mb_advantages - mb_advantages.mean(dim=0)) / (mb_advantages.std(dim=0) + 1e-8)
-                print("mb_advantages, ratio: ", mb_advantages, ratio)
+                # print("mb_advantages, ratio: ", mb_advantages, ratio)
                 with open("./runs/{}/println.txt".format(run_name), 'a') as f:
                     print("mb_advantages, ratio: ", mb_advantages, ratio, file=f)
                 # Policy loss
@@ -731,7 +706,7 @@ def main():
         torch.cuda.empty_cache()
         gc.collect()
 
-        envs.update_surrogate(iteration)
+        # envs.update_surrogate(iteration)
 
     envs.close()
     writer.close()
