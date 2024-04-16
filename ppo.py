@@ -184,6 +184,7 @@ class GAT(torch.nn.Module):
         self.num_actions = num_actions
         self.device = device
         self.edge_dim = 4
+        self.history_len = history_len
         self.num_partition = num_partition
         self.out_dim = out_dim
         self.actor = 1 if out_dim==1 else 0
@@ -237,6 +238,8 @@ class GAT(torch.nn.Module):
         x = self.conv3(x, edge_index, edge_attr)
 
         x = self.cluster_means(x[:-1, :], partition)                                        # (num_partition, hidden)
+
+        x, _ = self.pooling(x, x, x)                                                        # (num_partition, hidden)
 
         # History features
         history_actions, effect_history_actions = state["history"]
@@ -727,6 +730,8 @@ def main():
     
         torch.cuda.empty_cache()
         gc.collect()
+
+        envs.update_surrogate(iteration)
 
     envs.close()
     writer.close()

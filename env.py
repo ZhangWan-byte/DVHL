@@ -16,6 +16,15 @@ import time
 
 # from memory_profiler import profile
 
+def get_tree(data):
+    n, dim = data.shape
+    tree = AnnoyIndex(dim, metric='euclidean')
+    for i in range(n):
+        tree.add_item(i, data[i, :])
+    tree.build(20)
+
+    return tree
+
 # human surrogate
 class SiameseNet(nn.Module):
     def __init__(self, hidden, block, num_block, in_channels, out_channels=[10, 16, 32, 64], num_classes=16):
@@ -48,7 +57,7 @@ class SiameseNet(nn.Module):
 
 
 class DREnv(Env):
-    def __init__(self, x, label, model_path="./exp1/model_CosAnneal1.pt", action_space=27, history_len=7, save_path=None, num_steps=32, num_partition=20, size=256, run_name=None):
+    def __init__(self, x, label, model_path="./exp1/model_CosAnneal1.pt", action_space=27, history_len=7, save_path=None, num_steps=32, num_partition=20, size=256, run_name=None, inference=False, data=None, labels=None, idx=None):
         self.x = x
         self.label = label
         self.best_reward = 0
@@ -57,7 +66,12 @@ class DREnv(Env):
         self.best_name = None
         self.size = size
 
+        self.data = data
+        self.labels = labels
+        self.idx = idx
+
         self.run_name = run_name
+        self.inference = inference
 
         self.count = 0
         self.current_state = None
@@ -246,6 +260,11 @@ class DREnv(Env):
             with open("./runs/{}/println.txt".format(self.run_name), 'a') as f:
                 print("time used for fit-transform: {} s".format(t2-t1), file=f)
 
+            torch.save(torch.from_numpy(z0), os.path.join(self.save_path, "z_{}.pt".format(name)))
+            print("z saved to: {}".format(os.path.join(self.save_path, "z_{}.pt".format(name))))
+            with open("./runs/{}/println.txt".format(self.run_name), 'a') as f:
+                print("z saved to: {}".format(os.path.join(self.save_path, "z_{}.pt".format(name))), file=f)
+
             # features = np.zeros((5, 1))
             # print("Please refer to image {}.".format(os.path.join(self.save_path, name)))
             # features[0] = int(input("\n1. How many clusters?\n\tcount number of clusters\n"))
@@ -327,6 +346,35 @@ class DREnv(Env):
                 title=name + " reward: {:.4f}+{:.4f}".format(r1, r2), 
                 palette='Spectral' # None
             )
+            print("img saved to {}".format(os.path.join(self.save_path, name)))
+
+            if self.inference:
+                tree = get_tree(self.x)
+
+                knn = 2
+                entire_z = np.zeros((self.data.shape[0], knn))
+
+                for i in range(self.x.shape[0]):
+                    entire_z[self.idx[i]] = z0[i]
+
+                for i in range(self.data.shape[0]):
+                    if i in self.idx:
+                        continue
+                    else:
+                        ids = tree.get_nns_by_vector(self.data[i], knn)
+                        low_dim = np.mean(z0[ids], axis=0)
+                    entire_z[i] = low_dim
+
+                draw_z(
+                    z=normalise(entire_z), 
+                    cls=self.labels, 
+                    s=1, 
+                    save_path=os.path.join(self.save_path, "20k_iter{}_step{}".format(self.iteration, self.step)), 
+                    display=False, 
+                    title="20k_iter{}_step{}".format(self.iteration, self.step) + " reward: {:.4f}+{:.4f}".format(r1, r2), 
+                    palette='Spectral'
+                )
+                print("img saved to {}".format(os.path.join(self.save_path, "20k_iter{}_step{}".format(self.iteration, self.step))))
 
             return r1 + r2
 
@@ -338,23 +386,31 @@ class DREnv(Env):
         # 1. obtain n_neighbors / MN_ratio / FP_ratio
         hp = self.combinations[action % len(self.combinations)]
         alpha, beta, gamma = hp[:, 0], hp[:, 1], hp[:, 2]       # (20,), (20,), (20,)
-
+        print("alpha: ", alpha)
+        print("beta: ", beta)
+        print("gamma: ", gamma)
         alpha = {k:alpha[k] for k in range(len(alpha))}
         alpha = [alpha[i.item()] for i in partition]
 
-        beta = {k:alpha[k] for k in range(len(beta))}
+        beta = {k:beta[k] for k in range(len(beta))}
         beta = [beta[i.item()] for i in partition]
 
-        gamma = {k:alpha[k] for k in range(len(gamma))}
+        gamma = {k:gamma[k] for k in range(len(gamma))}
         gamma = [gamma[i.item()] for i in partition]
 
         n_neighbors = np.round(alpha * self.current_state["n_neighbors"]).astype(np.int32)
         MN_ratio = beta * self.current_state["MN_ratio"]
         FP_ratio = gamma * self.current_state["FP_ratio"]
-
+        
+        # # for idxx in [0, 2000, 10000]:
+        # for idxx in [0, 200, 500]:
+        #     print("change {}: ".format(idxx), n_neighbors[idxx], MN_ratio[idxx], FP_ratio[idxx])
+        
         # 2. obtain state - others
         state = self.obtain_state(self.x, self.label, n_neighbors, MN_ratio, FP_ratio, initial=False)
-
+        # # for idxx in [0, 2000, 10000]:
+        # for idxx in [0, 200, 500]:
+        #     print("state {}: ".format(idxx), state["n_neighbors"][idxx], state["MN_ratio"][idxx], state["FP_ratio"][idxx])
         # 3. obtain reward
         reward = self.obtain_reward(state)
 
@@ -381,7 +437,9 @@ class DREnv(Env):
 
         new_state, reward = self.transition(action, partition)
         self.current_state = new_state
-
+        # # for idxx in [0, 2000, 10000]:
+        # for idxx in [0, 200, 500]:
+        #     print("new_state {}: ".format(idxx), new_state["n_neighbors"][idxx], new_state["MN_ratio"][idxx], new_state["FP_ratio"][idxx])
         terminations = 0
 
         done = 0 if self.count<self.num_steps else 1
@@ -390,7 +448,7 @@ class DREnv(Env):
         else:
             info = {"episode": {"r":self.best_reward, "l": self.count}}
             
-        return self.current_state, reward, terminations, done, info
+        return new_state, reward, terminations, done, info
 
     def render(self):
         pass
@@ -429,6 +487,7 @@ class DREnv(Env):
             title="initial", 
             palette='Spectral' # None
         )
+        print("img saved to {}".format(os.path.join(self.save_path, "initial")))
 
         self.last_z = z
         self.best_z = z
