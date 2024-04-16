@@ -106,7 +106,7 @@ class Args:
     num_iterations: int = 0
     """the number of iterations (computed in runtime)"""
 
-    jianhong_advice: bool = False
+    jianhong_advice: bool = True
     """+ norm init / + reward norm / - norm_adv=False / - clip_vloss=False"""
 
 

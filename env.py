@@ -264,38 +264,7 @@ class DREnv(Env):
             print("z saved to: {}".format(os.path.join(self.save_path, "z_{}.pt".format(name))))
             with open("./runs/{}/println.txt".format(self.run_name), 'a') as f:
                 print("z saved to: {}".format(os.path.join(self.save_path, "z_{}.pt".format(name))), file=f)
-
-            # features = np.zeros((5, 1))
-            # print("Please refer to image {}.".format(os.path.join(self.save_path, name)))
-            # features[0] = int(input("\n1. How many clusters?\n\tcount number of clusters\n"))
-            # features[1] = int(input("\n2. Rate the shape of these clusters from 1 to 4\n\t'round -> oval -> spindle-shaped -> linear'.\n"))
-            # features[2] = int(input("\n3. How many 'connections' between clusters?\n\tfrom one cluster, you know what's 'next' cluster\n"))
-            # features[3] = int(input("\n4. Can you observe an obvious trend or ordinal relations between clusters? Scores from 1 to 5.\n\t1 - totally not\n\t2 - not obvious\n\t3 - partly trend\n\t4 - partial trend, need imagination\n\t5 - explicit trend\n"))
-            # features[4] = int(input("\n5. Do you like this visualisation? Scores from 1 to 5.\n"))
-            # np.save(os.path.join(self.save_path, "{}.npy".format(name)), features.reshape(1, -1))
-            
-            # feedback = features[-1]
-
-
-
-            # z = get_Ihat(normalise(z), size=100)
-            # z = torch.from_numpy(z).view(1,1,100,100).float().cuda()
-            # out = self.model(z).detach().cpu().view(-1)
-            # feedback = torch.argmax(out) + 1            # scores in {1,2,3,4,5}
-
-            # # r1: compared to last reward
-            # if len(self.history_feedbacks)==0 or feedback > self.history_feedbacks[-1]:
-            #     r1 = 1
-            # else:
-            #     r1 = 0
-
-            # # r2: compared to best reward
-            # r2 = feedback - self.best_feedback
-            # if r2>0:
-            #     self.best_feedback = feedback
-            
-            # print("feedback: {}, history_feedbacks: {}, r1: {}, r2: {}".format(feedback, self.history_feedbacks, r1, r2))
-            # self.history_feedbacks.append(feedback.item())
+                
 
             self.model.train()
 
