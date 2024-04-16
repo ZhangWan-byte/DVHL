@@ -224,6 +224,10 @@ class DREnv(Env):
         # conservative and discrete and sparse
             r = max((out_mean - np.sqrt(out_var)*3).round().item(), 0)
 
+        elif mode==4:
+        # directly use prob as reward
+            r = out_mean.item()
+
         else:
             print("not implemented heuristic!")
             exit()
@@ -264,7 +268,7 @@ class DREnv(Env):
             print("z saved to: {}".format(os.path.join(self.save_path, "z_{}.pt".format(name))))
             with open("./runs/{}/println.txt".format(self.run_name), 'a') as f:
                 print("z saved to: {}".format(os.path.join(self.save_path, "z_{}.pt".format(name))), file=f)
-                
+
 
             self.model.train()
 
