@@ -322,33 +322,33 @@ class DREnv(Env):
             )
             print("img saved to {}".format(os.path.join(self.save_path, name)))
 
-            if self.inference:
-                tree = get_tree(self.x)
+            # if self.inference:
+            #     tree = get_tree(self.x)
 
-                knn = 2
-                entire_z = np.zeros((self.data.shape[0], knn))
+            #     knn = 2
+            #     entire_z = np.zeros((self.data.shape[0], knn))
 
-                for i in range(self.x.shape[0]):
-                    entire_z[self.idx[i]] = z0[i]
+            #     for i in range(self.x.shape[0]):
+            #         entire_z[self.idx[i]] = z0[i]
 
-                for i in range(self.data.shape[0]):
-                    if i in self.idx:
-                        continue
-                    else:
-                        ids = tree.get_nns_by_vector(self.data[i], knn)
-                        low_dim = np.mean(z0[ids], axis=0)
-                    entire_z[i] = low_dim
+            #     for i in range(self.data.shape[0]):
+            #         if i in self.idx:
+            #             continue
+            #         else:
+            #             ids = tree.get_nns_by_vector(self.data[i], knn)
+            #             low_dim = np.mean(z0[ids], axis=0)
+            #         entire_z[i] = low_dim
 
-                draw_z(
-                    z=normalise(entire_z), 
-                    cls=self.labels, 
-                    s=1, 
-                    save_path=os.path.join(self.save_path, "20k_iter{}_step{}".format(self.iteration, self.step)), 
-                    display=False, 
-                    title="20k_iter{}_step{}".format(self.iteration, self.step) + " reward: {:.4f}+{:.4f}".format(r1, r2), 
-                    palette='Spectral'
-                )
-                print("img saved to {}".format(os.path.join(self.save_path, "20k_iter{}_step{}".format(self.iteration, self.step))))
+            #     draw_z(
+            #         z=normalise(entire_z), 
+            #         cls=self.labels, 
+            #         s=1, 
+            #         save_path=os.path.join(self.save_path, "20k_iter{}_step{}".format(self.iteration, self.step)), 
+            #         display=False, 
+            #         title="20k_iter{}_step{}".format(self.iteration, self.step) + " reward: {:.4f}+{:.4f}".format(r1, r2), 
+            #         palette='Spectral'
+            #     )
+            #     print("img saved to {}".format(os.path.join(self.save_path, "20k_iter{}_step{}".format(self.iteration, self.step))))
 
             return r1 + r2
 

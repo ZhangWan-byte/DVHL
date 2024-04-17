@@ -120,7 +120,7 @@ def main():
         stepsize=6,
         random_state=None,
     )
-    idx = np.random.choice(data.shape[0], 1000, replace=False)
+    idx = np.random.choice(data.shape[0], 20000, replace=False)
     data_1k, labels_1k = data[idx], labels[idx]
 
     num_partition = len(np.unique(labels))

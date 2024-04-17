@@ -516,6 +516,7 @@ def main():
             with torch.no_grad():
                 # try:
 
+                cnt = 0
                 # handle accident or illegal situation
                 while True:
                     action, logprob, _, value = agent.get_action_and_value(next_obs, partition=partition)
@@ -535,6 +536,11 @@ def main():
                     MN_ratio = beta * envs.current_state["MN_ratio"]
                     FP_ratio = gamma * envs.current_state["FP_ratio"]
 
+
+                    cnt += 1
+                    if cnt >10:
+                        break
+                    
                     if np.min(n_neighbors) < 1 or np.min(MN_ratio*n_neighbors) < 1 or np.min(FP_ratio*n_neighbors) < 1:
                         continue         
                     else:
