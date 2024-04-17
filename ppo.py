@@ -506,6 +506,8 @@ def main():
             lrnow = frac * args.learning_rate
             optimizer.param_groups[0]["lr"] = lrnow
 
+        terminate_iter = False
+
         for step in range(0, args.num_steps):
             global_step += args.num_envs
             # obs[step] = next_obs
@@ -539,12 +541,16 @@ def main():
 
                     cnt += 1
                     if cnt >10:
+                        terminate_iter = True
                         break
-                    
+
                     if np.min(n_neighbors) < 1 or np.min(MN_ratio*n_neighbors) < 1 or np.min(FP_ratio*n_neighbors) < 1:
                         continue         
                     else:
                         break
+
+                if terminate_iter:
+                    break
 
                 values[step] = value.flatten().view(-1,1)
             actions[step] = action.view(-1,1)
@@ -583,6 +589,9 @@ def main():
 
         torch.cuda.empty_cache()
         gc.collect()
+
+        if terminate_iter:
+            continue
 
         if args.jianhong_advice==True:
             rewards = (rewards - rewards.mean(dim=0)) / (rewards.std(dim=0) + 1e-8)
