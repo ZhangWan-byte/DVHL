@@ -516,7 +516,6 @@ def main():
 
             # ALGO LOGIC: action logic
             with torch.no_grad():
-                # try:
 
                 cnt = 0
                 # handle accident or illegal situation
@@ -538,9 +537,11 @@ def main():
                     MN_ratio = beta * envs.current_state["MN_ratio"]
                     FP_ratio = gamma * envs.current_state["FP_ratio"]
 
+                    torch.cuda.empty_cache()
+                    gc.collect()
 
                     cnt += 1
-                    if cnt >10:
+                    if cnt > 10:
                         terminate_iter = True
                         break
 
@@ -549,49 +550,52 @@ def main():
                     else:
                         break
 
-                if terminate_iter:
-                    break
-
+            if terminate_iter == False:
                 values[step] = value.flatten().view(-1,1)
-            actions[step] = action.view(-1,1)
-            logprobs[step] = logprob.view(-1,1)
+                actions[step] = action.view(-1,1)
+                logprobs[step] = logprob.view(-1,1)
 
-            torch.cuda.empty_cache()
-            gc.collect()
+                # TRY NOT TO MODIFY: execute the game and log data.
+                next_obs, reward, terminations, truncations, infos = envs.next_step(action.detach().cpu(), iteration, step, partition)
+                # next_done = np.logical_or(terminations, truncations)
+                rewards[step] = torch.tensor(reward).to(device).view(-1)
+                # next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(next_done).to(device)
+                next_done = torch.tensor(next_done).to(device)
 
-            # TRY NOT TO MODIFY: execute the game and log data.
-            next_obs, reward, terminations, truncations, infos = envs.next_step(action.detach().cpu(), iteration, step, partition)
-            # next_done = np.logical_or(terminations, truncations)
-            rewards[step] = torch.tensor(reward).to(device).view(-1)
-            # next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(next_done).to(device)
-            next_done = torch.tensor(next_done).to(device)
+                # print("\nhistory_len:{}\nhistory_rewards:{}\nhistory_actions:{}\nreward:{}\nnext_done:{}".format(
+                #     envs.history_len, envs.history_rewards, envs.history_actions, reward, 
+                #     next_done.detach().cpu().item()))
+                with open("./runs/{}/println.txt".format(run_name), 'a') as f:
+                    print("\nhistory_len:{}\nhistory_rewards:{}\nhistory_actions:{}\nreward:{}\nnext_done:{}".format(
+                    envs.history_len, envs.history_rewards, envs.history_actions, reward, 
+                    next_done.detach().cpu().item()), file=f)
+                # print("best: {}".format(envs.best_name))
+                with open("./runs/{}/println.txt".format(run_name), 'a') as f:
+                    print("best: {}".format(envs.best_name), file=f)
 
-            # print("\nhistory_len:{}\nhistory_rewards:{}\nhistory_actions:{}\nreward:{}\nnext_done:{}".format(
-            #     envs.history_len, envs.history_rewards, envs.history_actions, reward, 
-            #     next_done.detach().cpu().item()))
-            with open("./runs/{}/println.txt".format(run_name), 'a') as f:
-                print("\nhistory_len:{}\nhistory_rewards:{}\nhistory_actions:{}\nreward:{}\nnext_done:{}".format(
-                envs.history_len, envs.history_rewards, envs.history_actions, reward, 
-                next_done.detach().cpu().item()), file=f)
-            # print("best: {}".format(envs.best_name))
-            with open("./runs/{}/println.txt".format(run_name), 'a') as f:
-                print("best: {}".format(envs.best_name), file=f)
+                if "final_info" in infos:
+                    for info in infos["final_info"]:
+                        if info and "episode" in info:
+                            print(f"global_step={global_step}, episodic_return={info['episode']['r']}")
+                            writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
+                            writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)
 
-            if "final_info" in infos:
-                for info in infos["final_info"]:
-                    if info and "episode" in info:
-                        print(f"global_step={global_step}, episodic_return={info['episode']['r']}")
-                        writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
-                        writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)
-
-            # all_rewards.append(reward)
-            # all_actions.append(envs.history_actions[-1])
+            else:
+                break
 
         torch.cuda.empty_cache()
         gc.collect()
 
-        if terminate_iter:
-            continue
+        # truncate redundant null steps
+        if step+1 != args.num_steps:
+            actions = actions[:step+1]
+            logprobs = logprobs[:step+1]
+            values = values[:step+1]
+            rewards = rewards[:step+1]
+            dones = dones[:step+1]
+            actual_num_steps = step+1
+        else:
+            actual_num_steps = args.num_steps
 
         if args.jianhong_advice==True:
             rewards = (rewards - rewards.mean(dim=0)) / (rewards.std(dim=0) + 1e-8)
@@ -600,10 +604,10 @@ def main():
         with torch.no_grad():
             next_values = agent.get_value(next_obs, partition).reshape(1, -1)           # (1, num_partition)
 
-            advantages = torch.zeros((args.num_steps, num_partition)).to(device)
+            advantages = torch.zeros((actual_num_steps, num_partition)).to(device)
             lastgaelam = 0
-            for t in reversed(range(args.num_steps)):
-                if t == args.num_steps - 1:
+            for t in reversed(range(actual_num_steps)):
+                if t == actual_num_steps - 1:
                     nextnonterminal = 1.0 - next_done
                     nextvalues = next_values.view(-1)
                 else:
@@ -615,12 +619,12 @@ def main():
             returns = advantages.to(device) + values.squeeze().to(device)           # (num_steps, num_partition)
 
         b_obs = deepcopy(obs)
-        b_logprobs = logprobs.reshape(args.num_steps, -1)
-        b_actions = actions.reshape(args.num_steps, -1)
-        b_values = values.reshape(args.num_steps, -1)
+        b_logprobs = logprobs.reshape(actual_num_steps, -1)
+        b_actions = actions.reshape(actual_num_steps, -1)
+        b_values = values.reshape(actual_num_steps, -1)
 
-        b_advantages = advantages.reshape(args.num_steps, -1)
-        b_returns = returns.reshape(args.num_steps, -1)
+        b_advantages = advantages.reshape(actual_num_steps, -1)
+        b_returns = returns.reshape(actual_num_steps, -1)
 
         # Optimizing the policy and value network
         b_inds = np.arange(args.batch_size)
@@ -711,9 +715,9 @@ def main():
             print("SPS:", int(global_step / (time.time() - start_time)), file=f)
         writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
 
-        if torch.sum(envs.history_rewards[-args.num_steps:]) >= envs.best_epoch_reward:
+        if torch.sum(envs.history_rewards[-actual_num_steps:]) >= envs.best_epoch_reward:
             torch.save(agent.state_dict(), "./runs/{}/best_epoch_agent.pt".format(run_name))
-            envs.best_epoch_reward = torch.sum(envs.history_rewards[-args.num_steps:])
+            envs.best_epoch_reward = torch.sum(envs.history_rewards[-actual_num_steps:])
         torch.save(agent.state_dict(), "./runs/{}/agent.pt".format(run_name))
         torch.save(envs.history_rewards, "./runs/{}/history_rewards.pt".format(run_name))
         torch.save(envs.history_actions, "./runs/{}/history_actions.pt".format(run_name))

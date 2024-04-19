@@ -284,7 +284,7 @@ class DREnv(Env):
             out1_mean = np.mean(out1)
             out1_var = np.var(out1)
 
-            r1 = self.heuristic(out1_mean, out1_var, mode=2, t1=0.02, t2=0.5)
+            r1 = self.heuristic(out1_mean, out1_var, mode=4, t1=0.02, t2=0.5)
 
             # r2: compared to best vis
             out2 = []
@@ -294,7 +294,7 @@ class DREnv(Env):
             out2_mean = np.mean(out2)
             out2_var = np.var(out2)
 
-            r2 = self.heuristic(out2_mean, out2_var, mode=2, t1=0.02, t2=0.5)
+            r2 = self.heuristic(out2_mean, out2_var, mode=4, t1=0.02, t2=0.5)
 
             # update last and best vis
             self.last_z = z
@@ -376,15 +376,9 @@ class DREnv(Env):
         MN_ratio = beta * self.current_state["MN_ratio"]
         FP_ratio = gamma * self.current_state["FP_ratio"]
         
-        # # for idxx in [0, 2000, 10000]:
-        # for idxx in [0, 200, 500]:
-        #     print("change {}: ".format(idxx), n_neighbors[idxx], MN_ratio[idxx], FP_ratio[idxx])
-        
         # 2. obtain state - others
         state = self.obtain_state(self.x, self.label, n_neighbors, MN_ratio, FP_ratio, initial=False)
-        # # for idxx in [0, 2000, 10000]:
-        # for idxx in [0, 200, 500]:
-        #     print("state {}: ".format(idxx), state["n_neighbors"][idxx], state["MN_ratio"][idxx], state["FP_ratio"][idxx])
+        
         # 3. obtain reward
         reward = self.obtain_reward(state)
 
@@ -411,9 +405,6 @@ class DREnv(Env):
 
         new_state, reward = self.transition(action, partition)
         self.current_state = new_state
-        # # for idxx in [0, 2000, 10000]:
-        # for idxx in [0, 200, 500]:
-        #     print("new_state {}: ".format(idxx), new_state["n_neighbors"][idxx], new_state["MN_ratio"][idxx], new_state["FP_ratio"][idxx])
         terminations = 0
 
         done = 0 if self.count<self.num_steps else 1
