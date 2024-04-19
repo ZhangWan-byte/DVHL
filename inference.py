@@ -34,7 +34,7 @@ class Args:
     # Algorithm specific
     env_id: str = "DVHL"
     """the id of the environment"""
-    num_steps: int = 100
+    num_steps: int = 64 #100
     """number of rollout steps"""
     num_policy: int = 6
     """number of policies"""
@@ -56,9 +56,9 @@ class InferenceAgent(nn.Module):
             out_dim=num_actions, 
             std=0.01, 
             history_len=history_len, 
-            num_partition=num_partition, 
-            device=device
+            num_partition=num_partition
         )
+
         if actor_path is not None:
             self.actor.load_state_dict(torch.load(actor_path))
 
@@ -120,7 +120,7 @@ def main():
         stepsize=6,
         random_state=None,
     )
-    idx = np.random.choice(data.shape[0], 20000, replace=False)
+    idx = np.random.choice(data.shape[0], 10000, replace=False)
     data_1k, labels_1k = data[idx], labels[idx]
 
     num_partition = len(np.unique(labels))

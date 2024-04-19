@@ -96,10 +96,16 @@ class DREnv(Env):
         self.model.train()
 
         # actions
-        self.alpha_values = [0.8, 1.0, 1.2]                # value range of ratio of kNN
-        self.beta_values = [0.8, 1.0, 1.2]                 # value range of ratio of mid-pairs
-        self.gamma_values = [0.8, 1.0, 1.2]                # value range of ratio of negatives
-        # self.hetero_homo = [0, 1, 2]                       # 0 - random / 1 - hetero / 2 - homo
+        if self.inference==False:
+            self.alpha_values = [0.8, 1.0, 1.2]                # value range of ratio of kNN
+            self.beta_values = [0.8, 1.0, 1.2]                 # value range of ratio of mid-pairs
+            self.gamma_values = [0.8, 1.0, 1.2]                # value range of ratio of negatives
+            # self.hetero_homo = [0, 1, 2]                       # 0 - random / 1 - hetero / 2 - homo
+        else:
+            self.alpha_values = [0.5, 1.0, 2.0]                # value range of ratio of kNN
+            self.beta_values = [0.5, 1.0, 2.0]                 # value range of ratio of mid-pairs
+            self.gamma_values = [0.5, 1.0, 2.0]                # value range of ratio of negatives
+        
         # 3 * 3 * 3 = 27 actions (0,1,...,26)
         self.combinations = np.array(
             list(itertools.product(self.alpha_values, self.beta_values, self.gamma_values))

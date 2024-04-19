@@ -238,7 +238,7 @@ class GAT(torch.nn.Module):
 
 
 class PolicyEnsemble(nn.Module):
-    def __init__(self, num_models, num_node_features, hidden, num_actions, out_dim, std, history_len, num_partition, device):
+    def __init__(self, num_models, num_node_features, hidden, num_actions, out_dim, std, history_len, num_partition):
         super().__init__()
         self.base_models = nn.ModuleList([])
         for _ in range(num_models):
@@ -250,7 +250,7 @@ class PolicyEnsemble(nn.Module):
                 std=std, 
                 history_len=history_len, 
                 num_partition=num_partition
-            ).to(device)
+            )
             self.base_models.append(base)
 
     def forward(self, state, partition=None):
@@ -299,8 +299,7 @@ class Agent(nn.Module):
             out_dim=1, 
             std=1.0, 
             history_len=history_len, 
-            num_partition=num_partition, 
-            device=device
+            num_partition=num_partition
         )
         self.actor = PolicyEnsemble(
             num_models=num_policy, 
@@ -310,9 +309,9 @@ class Agent(nn.Module):
             out_dim=num_actions, 
             std=0.01, 
             history_len=history_len, 
-            num_partition=num_partition, 
-            device=device
+            num_partition=num_partition
         )
+        
         if critic_path is not None:
             self.critic.load_state_dict(torch.load(critic_path))
         if actor_path is not None:
@@ -461,7 +460,15 @@ def main():
         run_name=run_name
     )
 
-    agent = Agent(envs, num_policy=args.num_policy, num_node_features=data.shape[1], hidden=32, history_len=7, num_actions=27, num_partition=num_partition).to(device)
+    agent = Agent(
+        envs, 
+        num_policy=args.num_policy, 
+        num_node_features=data.shape[1], 
+        hidden=32, 
+        history_len=7, 
+        num_actions=27, 
+        num_partition=num_partition
+    ).to(device)
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
     print("actor params: {}".format(sum([p.numel() for p in agent.actor.parameters()])))
@@ -470,14 +477,6 @@ def main():
         print("actor params: {}".format(sum([p.numel() for p in agent.actor.parameters()])), file=f)
         print("critic params: {}".format(sum([p.numel() for p in agent.critic.parameters()])), file=f)
 
-    # ALGO Logic: Storage setup
-    # obs = torch.zeros((args.num_steps, args.num_envs) + envs.single_observation_space.shape).to(device)
-    # actions = torch.zeros((args.num_steps, args.num_envs) + envs.single_action_space.shape).to(device)
-    # logprobs = torch.zeros((args.num_steps, args.num_envs)).to(device)
-    # rewards = torch.zeros((args.num_steps, args.num_envs)).to(device)
-    # dones = torch.zeros((args.num_steps, args.num_envs)).to(device)
-    # values = torch.zeros((args.num_steps, args.num_envs)).to(device)
-
     # TRY NOT TO MODIFY: start the game
     global_step = 0
     start_time = time.time()
@@ -485,20 +484,19 @@ def main():
     # all_rewards = []
     # all_actions = []
 
+    next_done = torch.zeros(args.num_envs).to(device)
+
+    obs = []
+    actions = torch.zeros((args.num_steps, num_partition, args.num_envs)).to(device)
+    logprobs = torch.zeros((args.num_steps, num_partition, args.num_envs)).to(device)
+    values = torch.zeros((args.num_steps, num_partition, args.num_envs)).to(device)
+    rewards = torch.zeros((args.num_steps, args.num_envs)).to(device)
+    dones = torch.zeros((args.num_steps, args.num_envs)).to(device)
+
     for iteration in range(1, args.num_iterations + 1):
         # reset obs each iteration, as other variables do. otherwise OOM.
         
-        # next_obs, _ = envs.reset(seed=args.seed)
         next_obs = envs.reset()
-        # next_obs = torch.Tensor(next_obs).to(device)
-        next_done = torch.zeros(args.num_envs).to(device)
-
-        obs = []
-        actions = torch.zeros((args.num_steps, num_partition, args.num_envs)).to(device)
-        logprobs = torch.zeros((args.num_steps, num_partition, args.num_envs)).to(device)
-        values = torch.zeros((args.num_steps, num_partition, args.num_envs)).to(device)
-        rewards = torch.zeros((args.num_steps, args.num_envs)).to(device)
-        dones = torch.zeros((args.num_steps, args.num_envs)).to(device)
 
         # Annealing the rate if instructed to do so.
         if args.anneal_lr:
@@ -593,9 +591,12 @@ def main():
             values = values[:step+1]
             rewards = rewards[:step+1]
             dones = dones[:step+1]
+
             actual_num_steps = step+1
+            actual_batch_size = step+1
         else:
             actual_num_steps = args.num_steps
+            actual_num_steps = args.batch_size
 
         if args.jianhong_advice==True:
             rewards = (rewards - rewards.mean(dim=0)) / (rewards.std(dim=0) + 1e-8)
@@ -616,7 +617,7 @@ def main():
                 delta = rewards[t].view(-1) + args.gamma * nextvalues * nextnonterminal - values[t].view(-1)        # (num_partition, )
                 advantages[t] = lastgaelam = delta + args.gamma * args.gae_lambda * nextnonterminal * lastgaelam
 
-            returns = advantages.to(device) + values.squeeze().to(device)           # (num_steps, num_partition)
+            returns = advantages + values.squeeze()           # (num_steps, num_partition)
 
         b_obs = deepcopy(obs)
         b_logprobs = logprobs.reshape(actual_num_steps, -1)
@@ -627,11 +628,11 @@ def main():
         b_returns = returns.reshape(actual_num_steps, -1)
 
         # Optimizing the policy and value network
-        b_inds = np.arange(args.batch_size)
+        b_inds = np.arange(actual_batch_size)
         clipfracs = []
         for epoch in range(args.update_epochs):
             np.random.shuffle(b_inds)
-            for start in tqdm(range(0, args.batch_size, args.minibatch_size)):
+            for start in tqdm(range(0, actual_batch_size, args.minibatch_size)):
                 end = start + args.minibatch_size
                 mb_inds = b_inds[start:end]
 
