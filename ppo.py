@@ -596,7 +596,7 @@ def main():
             actual_batch_size = step+1
         else:
             actual_num_steps = args.num_steps
-            actual_num_steps = args.batch_size
+            actual_batch_size = args.batch_size
 
         if args.jianhong_advice==True:
             rewards = (rewards - rewards.mean(dim=0)) / (rewards.std(dim=0) + 1e-8)
