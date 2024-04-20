@@ -548,7 +548,9 @@ def main():
                     else:
                         break
 
-            if terminate_iter == False:
+            if terminate_iter == True:
+                break
+            else:
                 values[step] = value.flatten().view(-1,1)
                 actions[step] = action.view(-1,1)
                 logprobs[step] = logprob.view(-1,1)
@@ -576,24 +578,21 @@ def main():
                         if info and "episode" in info:
                             print(f"global_step={global_step}, episodic_return={info['episode']['r']}")
                             writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
-                            writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)
-
-            else:
-                break
+                            writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)      
 
         torch.cuda.empty_cache()
         gc.collect()
 
         # truncate redundant null steps
-        if step+1 != args.num_steps:
-            actions = actions[:step+1]
-            logprobs = logprobs[:step+1]
-            values = values[:step+1]
-            rewards = rewards[:step+1]
-            dones = dones[:step+1]
+        if terminate_iter==True:
+            actions = actions[:step]
+            logprobs = logprobs[:step]
+            values = values[:step]
+            rewards = rewards[:step]
+            dones = dones[:step]
 
-            actual_num_steps = step+1
-            actual_batch_size = step+1
+            actual_num_steps = step
+            actual_batch_size = step
         else:
             actual_num_steps = args.num_steps
             actual_batch_size = args.batch_size
