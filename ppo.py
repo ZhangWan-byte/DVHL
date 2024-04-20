@@ -481,22 +481,19 @@ def main():
     global_step = 0
     start_time = time.time()
 
-    # all_rewards = []
-    # all_actions = []
-
-    next_done = torch.zeros(args.num_envs).to(device)
-
-    obs = []
-    actions = torch.zeros((args.num_steps, num_partition, args.num_envs)).to(device)
-    logprobs = torch.zeros((args.num_steps, num_partition, args.num_envs)).to(device)
-    values = torch.zeros((args.num_steps, num_partition, args.num_envs)).to(device)
-    rewards = torch.zeros((args.num_steps, args.num_envs)).to(device)
-    dones = torch.zeros((args.num_steps, args.num_envs)).to(device)
-
     for iteration in range(1, args.num_iterations + 1):
         # reset obs each iteration, as other variables do. otherwise OOM.
         
         next_obs = envs.reset()
+
+        next_done = torch.zeros(args.num_envs).to(device)
+
+        obs = []
+        actions = torch.zeros((args.num_steps, num_partition, args.num_envs)).to(device)
+        logprobs = torch.zeros((args.num_steps, num_partition, args.num_envs)).to(device)
+        values = torch.zeros((args.num_steps, num_partition, args.num_envs)).to(device)
+        rewards = torch.zeros((args.num_steps, args.num_envs)).to(device)
+        dones = torch.zeros((args.num_steps, args.num_envs)).to(device)
 
         # Annealing the rate if instructed to do so.
         if args.anneal_lr:
