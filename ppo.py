@@ -478,6 +478,8 @@ def main():
         print("critic params: {}".format(sum([p.numel() for p in agent.critic.parameters()])), file=f)
 
     print("anneal_lr: {}".format(args.anneal_lr))
+    with open("./runs/{}/println.txt".format(run_name), 'a') as f:
+        print("anneal_lr: {}".format(args.anneal_lr), file=f)
 
     # ALGO Logic: Storage setup
     actions_0 = torch.zeros((args.num_steps, num_partition, args.num_envs)).to(device)
