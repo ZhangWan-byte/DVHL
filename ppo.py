@@ -576,9 +576,9 @@ def main():
                     print("best: {}".format(envs.best_name), file=f)
 
                 if "episode" in infos.keys():
-                    print(f"global_step={global_step}, episodic_return={info['episode']['r']}")
-                    writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
-                    writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)      
+                    print(f"global_step={global_step}, episodic_return={infos['episode']['r']}")
+                    writer.add_scalar("charts/episodic_return", infos["episode"]["r"], global_step)
+                    writer.add_scalar("charts/episodic_length", infos["episode"]["l"], global_step)      
 
         torch.cuda.empty_cache()
         gc.collect()
