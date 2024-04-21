@@ -477,23 +477,25 @@ def main():
         print("actor params: {}".format(sum([p.numel() for p in agent.actor.parameters()])), file=f)
         print("critic params: {}".format(sum([p.numel() for p in agent.critic.parameters()])), file=f)
 
+    # ALGO Logic: Storage setup
+    actions_0 = torch.zeros((args.num_steps, num_partition, args.num_envs)).to(device)
+    logprobs_0 = torch.zeros((args.num_steps, num_partition, args.num_envs)).to(device)
+    rewards_0 = torch.zeros((args.num_steps, args.num_envs)).to(device)
+    dones_0 = torch.zeros((args.num_steps, args.num_envs)).to(device)
+    values_0 = torch.zeros((args.num_steps, num_partition, args.num_envs)).to(device)
+
     # TRY NOT TO MODIFY: start the game
     global_step = 0
     start_time = time.time()
+
+    next_done = torch.zeros(args.num_envs).to(device)
 
     for iteration in range(1, args.num_iterations + 1):
         # reset obs each iteration, as other variables do. otherwise OOM.
         
         next_obs = envs.reset()
 
-        next_done = torch.zeros(args.num_envs).to(device)
-
-        obs = []
-        actions = torch.zeros((args.num_steps, num_partition, args.num_envs)).to(device)
-        logprobs = torch.zeros((args.num_steps, num_partition, args.num_envs)).to(device)
-        values = torch.zeros((args.num_steps, num_partition, args.num_envs)).to(device)
-        rewards = torch.zeros((args.num_steps, args.num_envs)).to(device)
-        dones = torch.zeros((args.num_steps, args.num_envs)).to(device)
+        obs = []        
 
         # Annealing the rate if instructed to do so.
         if args.anneal_lr:
@@ -507,7 +509,7 @@ def main():
             global_step += args.num_envs
             # obs[step] = next_obs
             obs.append(next_obs)
-            dones[step] = next_done
+            dones_0[step] = next_done
 
             # ALGO LOGIC: action logic
             with torch.no_grad():
@@ -548,45 +550,43 @@ def main():
             if terminate_iter == True:
                 break
             else:
-                values[step] = value.flatten().view(-1,1)
-                actions[step] = action.view(-1,1)
-                logprobs[step] = logprob.view(-1,1)
+                values_0[step] = value.flatten().view(-1,1)
+                actions_0[step] = action.view(-1,1)
+                logprobs_0[step] = logprob.view(-1,1)
 
                 # TRY NOT TO MODIFY: execute the game and log data.
-                next_obs, reward, terminations, truncations, infos = envs.next_step(action.detach().cpu(), iteration, step, partition)
-                # next_done = np.logical_or(terminations, truncations)
-                rewards[step] = torch.tensor(reward).to(device).view(-1)
-                # next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(next_done).to(device)
-                next_done = torch.tensor(next_done).to(device)
+                next_obs, reward, terminations, done, infos = envs.next_step(action, iteration, step, partition)
+                # rewards[step] = torch.tensor(reward).to(device).view(-1)
+                # next_done = torch.tensor(next_done).to(device)
+                next_done = done
 
                 # print("\nhistory_len:{}\nhistory_rewards:{}\nhistory_actions:{}\nreward:{}\nnext_done:{}".format(
                 #     envs.history_len, envs.history_rewards, envs.history_actions, reward, 
-                #     next_done.detach().cpu().item()))
+                #     next_done))
                 with open("./runs/{}/println.txt".format(run_name), 'a') as f:
                     print("\nhistory_len:{}\nhistory_rewards:{}\nhistory_actions:{}\nreward:{}\nnext_done:{}".format(
                     envs.history_len, envs.history_rewards, envs.history_actions, reward, 
-                    next_done.detach().cpu().item()), file=f)
+                    next_done), file=f)
                 # print("best: {}".format(envs.best_name))
                 with open("./runs/{}/println.txt".format(run_name), 'a') as f:
                     print("best: {}".format(envs.best_name), file=f)
 
-                if "final_info" in infos:
-                    for info in infos["final_info"]:
-                        if info and "episode" in info:
-                            print(f"global_step={global_step}, episodic_return={info['episode']['r']}")
-                            writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
-                            writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)      
+                if "episode" in infos.keys():
+                    print(f"global_step={global_step}, episodic_return={info['episode']['r']}")
+                    writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
+                    writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)      
 
         torch.cuda.empty_cache()
         gc.collect()
 
         # truncate redundant null steps
         if terminate_iter==True:
-            actions = actions[:step]
-            logprobs = logprobs[:step]
-            values = values[:step]
-            rewards = rewards[:step]
-            dones = dones[:step]
+            actions = actions_0[:step]
+            logprobs = logprobs_0[:step]
+            values = values_0[:step]
+            rewards = rewards_0[:step]
+            dones = dones_0[:step]
+            dones[-1] = 1
 
             actual_num_steps = step
             actual_batch_size = step
@@ -605,7 +605,7 @@ def main():
             lastgaelam = 0
             for t in reversed(range(actual_num_steps)):
                 if t == actual_num_steps - 1:
-                    nextnonterminal = 1.0 - next_done
+                    nextnonterminal = 1.0 - dones[-1]
                     nextvalues = next_values.view(-1)
                 else:
                     nextnonterminal = 1.0 - dones[t + 1]
@@ -615,7 +615,7 @@ def main():
 
             returns = advantages + values.squeeze()           # (num_steps, num_partition)
 
-        b_obs = deepcopy(obs)
+        b_obs = obs #deepcopy(obs)
         b_logprobs = logprobs.reshape(actual_num_steps, -1)
         b_actions = actions.reshape(actual_num_steps, -1)
         b_values = values.reshape(actual_num_steps, -1)
@@ -707,10 +707,13 @@ def main():
         writer.add_scalar("losses/approx_kl", approx_kl.mean().item(), global_step)
         writer.add_scalar("losses/clipfrac", np.mean(clipfracs), global_step)
         writer.add_scalar("losses/explained_variance", explained_var, global_step)
-        print("SPS:", int(global_step / (time.time() - start_time)))
+        writer.add_scalar("losses/rewards", envs.history_rewards[:], global_step)
+
+        now_time = time.time()
+        print("SPS:", int(global_step / (now_time - start_time)))
         with open("./runs/{}/println.txt".format(run_name), 'a') as f:
-            print("SPS:", int(global_step / (time.time() - start_time)), file=f)
-        writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
+            print("SPS:", int(global_step / (now_time - start_time)), file=f)
+        writer.add_scalar("charts/SPS", int(global_step / (now_time- start_time)), global_step)
 
         if torch.sum(envs.history_rewards[-actual_num_steps:]) >= envs.best_epoch_reward:
             torch.save(agent.state_dict(), "./runs/{}/best_epoch_agent.pt".format(run_name))

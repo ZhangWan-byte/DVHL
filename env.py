@@ -78,6 +78,12 @@ class DREnv(Env):
         self.action_space = action_space
 
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.done_list = [torch.tensor(0).to(self.device), torch.tensor(1).to(self.device)]
+        self.out1 = torch.zeros((10, 1)).to(self.device)
+        self.out2 = torch.zeros((10, 1)).to(self.device)
+        self.zero = torch.tensor([0.]).to(self.device)
+        self.one = torch.tensor([1.]).to(self.device)
+
         self.num_partition = num_partition
 
         # human surrogate
@@ -118,12 +124,12 @@ class DREnv(Env):
 
         # record during training
         self.best_epoch_reward = 0
-        self.history_rewards = torch.tensor([])
+        self.history_rewards = torch.tensor([]).to(self.device)
 
         # history: actions / effect
         self.history_len = history_len
-        self.history_actions = torch.zeros((history_len, self.num_partition))
-        self.effect_history_actions = torch.zeros(1)
+        self.history_actions = torch.zeros((history_len, self.num_partition)).to(self.device)
+        self.effect_history_actions = torch.zeros([1]).to(self.device)
 
         # like a sentence, abcdefg0 / fdsjkhy1, each character is one_hot
         self.history = [self.history_actions, self.effect_history_actions]
@@ -208,9 +214,9 @@ class DREnv(Env):
                 r = out_mean.round()
             else:
                 if out_mean > t2:
-                    r = max((out_mean - np.sqrt(out_var)*3).round().item(), 0)
+                    r = max((out_mean - torch.sqrt(out_var)*3).round(), self.zero)
                 else:
-                    r = min((out_mean + np.sqrt(out_var)*3).round().item(), 1)
+                    r = min((out_mean + torch.sqrt(out_var)*3).round(), self.one)
 
         elif mode==1:
         # constructively conservative and continuous and dense
@@ -218,21 +224,21 @@ class DREnv(Env):
                 r = out_mean
             else:
                 if out_mean > t2:
-                    r = max((out_mean - np.sqrt(out_var)).item(), 0)
+                    r = max((out_mean - torch.sqrt(out_var)), self.zero)
                 else:
-                    r = min((out_mean + np.sqrt(out_var)).item(), 1)
+                    r = min((out_mean + torch.sqrt(out_var)), self.one)
 
         elif mode==2:
         # conservative and continuous and dense
-            r = max((out_mean - np.sqrt(out_var)).item(), 0)
+            r = max((out_mean - torch.sqrt(out_var)), self.zero)
 
         elif mode==3:
         # conservative and discrete and sparse
-            r = max((out_mean - np.sqrt(out_var)*3).round().item(), 0)
+            r = max((out_mean - torch.sqrt(out_var)*3).round(), self.zero)
 
         elif mode==4:
         # directly use prob as reward
-            r = out_mean.item()
+            r = out_mean
 
         else:
             print("not implemented heuristic!")
@@ -282,25 +288,21 @@ class DREnv(Env):
             z = torch.from_numpy(z).view(1,1,self.size,self.size).float().cuda()
             
             # r1: compared to last vis
-            # rigorous reward: allow false negative, rejct false positive
-            out1 = []
-            for _ in range(10):
-                out = self.model(z, self.last_z).detach().cpu().item()
-                out1.append(out)
-            out1_mean = np.mean(out1)
-            out1_var = np.var(out1)
-
-            r1 = self.heuristic(out1_mean, out1_var, mode=4, t1=0.02, t2=0.5)
+            for out_idx in range(10):
+                out = self.model(z, self.last_z)
+                self.out1[out_idx] = out
+            # print("out1: {}, {}, {}".format(self.out1, torch.mean(self.out1), torch.var(self.out1)))
+            r1 = self.heuristic(out_mean=torch.mean(self.out1), out_var=torch.var(self.out1), mode=2, t1=0.02, t2=0.5)
+            # e.g., tensor([0.2280], device='cuda:0')
 
             # r2: compared to best vis
-            out2 = []
-            for _ in range(10):
-                out = self.model(z, self.best_z).detach().cpu().item()
-                out2.append(out)
-            out2_mean = np.mean(out2)
-            out2_var = np.var(out2)
-
-            r2 = self.heuristic(out2_mean, out2_var, mode=4, t1=0.02, t2=0.5)
+            for out_idx in range(10):
+                out = self.model(z, self.best_z)
+                self.out2[out_idx] = out
+            # print("out2: {}, {}, {}".format(self.out2, torch.mean(self.out2), torch.var(self.out2)))
+            # print("type: {}, {}".format(type(torch.mean(self.out2)), torch.mean(self.out2).device))
+            r2 = self.heuristic(out_mean=torch.mean(self.out2), out_var=torch.var(self.out2), mode=2, t1=0.02, t2=0.5)
+            # e.g., tensor([0.2280], device='cuda:0')
 
             # update last and best vis
             self.last_z = z
@@ -323,7 +325,7 @@ class DREnv(Env):
                 s=1, 
                 save_path=os.path.join(self.save_path, name), 
                 display=False, 
-                title=name + " reward: {:.4f}+{:.4f}".format(r1, r2), 
+                title=name + " reward: {:.4f}+{:.4f}".format(r1.item(), r2.item()), 
                 palette='Spectral' # None
             )
             print("img saved to {}".format(os.path.join(self.save_path, name)))
@@ -364,7 +366,7 @@ class DREnv(Env):
         """
         
         # 1. obtain n_neighbors / MN_ratio / FP_ratio
-        hp = self.combinations[action % len(self.combinations)]
+        hp = self.combinations[action.detach().cpu() % len(self.combinations)]
         alpha, beta, gamma = hp[:, 0], hp[:, 1], hp[:, 2]       # (20,), (20,), (20,)
         print("alpha: ", alpha)
         print("beta: ", beta)
@@ -392,12 +394,12 @@ class DREnv(Env):
 
         self.history_actions = torch.vstack([self.history_actions, action])                                     # update history actions
 
-        self.history_rewards = torch.hstack([self.history_rewards, torch.tensor(reward)])                       # update history rewards
+        self.history_rewards = torch.hstack([self.history_rewards, reward])                                     # update history rewards
 
         if reward > self.history_rewards[max(-self.history_len, -len(self.history_rewards))]:                   # add history info to state
-            self.effect_history_actions = torch.tensor([1])
+            self.effect_history_actions = torch.tensor([1]).cuda()
         else:
-            self.effect_history_actions = torch.tensor([0])
+            self.effect_history_actions = torch.tensor([0]).cuda()
         self.history = [self.history_actions[-self.history_len:, :], self.effect_history_actions]
 
         state["history"] = [i.to(self.device) for i in self.history]
@@ -413,11 +415,11 @@ class DREnv(Env):
         self.current_state = new_state
         terminations = 0
 
-        done = 0 if self.count<self.num_steps else 1
+        done = self.done_list[0] if self.count<self.num_steps else self.done_list[1]
         if done!=1:
             info = {}
         else:
-            info = {"episode": {"r":self.best_reward, "l": self.count}}
+            info = {"episode": {"r":sum(self.history_rewards[-(self.step+1):]).item(), "l": self.count}}
             
         return new_state, reward, terminations, done, info
 
