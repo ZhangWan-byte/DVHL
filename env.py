@@ -419,7 +419,12 @@ class DREnv(Env):
         if done!=1:
             info = {}
         else:
-            info = {"episode": {"r":sum(self.history_rewards[-(self.step+1):]).item(), "l": self.count}}
+            info = {
+                "episode": {
+                    "r":sum(self.history_rewards[-(self.step+1):]).item(), 
+                    "l": self.count
+                }
+            }
             
         return new_state, reward, terminations, done, info
 
