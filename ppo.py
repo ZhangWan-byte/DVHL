@@ -477,6 +477,8 @@ def main():
         print("actor params: {}".format(sum([p.numel() for p in agent.actor.parameters()])), file=f)
         print("critic params: {}".format(sum([p.numel() for p in agent.critic.parameters()])), file=f)
 
+    print("anneal_lr: {}".format(args.anneal_lr))
+
     # ALGO Logic: Storage setup
     actions_0 = torch.zeros((args.num_steps, num_partition, args.num_envs)).to(device)
     logprobs_0 = torch.zeros((args.num_steps, num_partition, args.num_envs)).to(device)
