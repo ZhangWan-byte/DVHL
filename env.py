@@ -14,6 +14,9 @@ from myPaCMAP import *
 import itertools
 import time
 
+import networkx as nx
+from sklearn.neighbors import kneighbors_graph
+
 # from memory_profiler import profile
 
 def get_tree(data):
@@ -57,7 +60,7 @@ class SiameseNet(nn.Module):
 
 
 class DREnv(Env):
-    def __init__(self, x, label, model_path="./exp1/model_CosAnneal1.pt", action_space=27, history_len=7, save_path=None, num_steps=32, num_partition=20, size=256, run_name=None, inference=False, data=None, labels=None, idx=None):
+    def __init__(self, x, label, model_path="./exp1/model_CosAnneal1.pt", action_space=27, history_len=7, save_path=None, num_steps=32, num_partition=20, size=256, run_name=None, inference=False, data=None, labels=None, idx=None, r3_coef=3):
         self.x = x
         self.label = label
         self.best_reward = 0
@@ -85,6 +88,7 @@ class DREnv(Env):
         self.one = torch.tensor([1.]).to(self.device)
 
         self.num_partition = num_partition
+        self.coef = r3_coef
 
         # human surrogate
         self.model = SiameseNet(
@@ -246,6 +250,22 @@ class DREnv(Env):
 
         return r
 
+    def MST_length(self, z, k=5):
+        
+        z = normalise(z)
+
+        # A = kneighbors_graph(z, n_neighbors=k, mode='connectivity', metric='euclidean', include_self=False)
+        A = kneighbors_graph(z, n_neighbors=k, mode='distance', metric='euclidean', include_self=False)
+        # A[A > 0.002] = 0
+
+        G = nx.Graph(A)
+
+        MST = nx.minimum_spanning_tree(G)
+        length = sum(weight for _, _, weight in MST.edges(data='weight'))
+        # print("MST length: ", length)
+
+        return length
+
     def obtain_reward(self, state):
         with torch.no_grad():
 
@@ -304,6 +324,10 @@ class DREnv(Env):
             r2 = self.heuristic(out_mean=torch.mean(self.out2), out_var=torch.var(self.out2), mode=2, t1=0.02, t2=0.5)
             # e.g., tensor([0.2280], device='cuda:0')
 
+            # r3: MST length
+            length = self.MST_length(z0)
+            r3 = torch.tensor([self.coef / length]).cuda()
+
             # update last and best vis
             self.last_z = z
             # if r1+r2 > self.best_reward:
@@ -312,11 +336,11 @@ class DREnv(Env):
                 self.best_z = z
                 self.best_z0 = z0
                 self.best_name = name
-                self.best_reward = r1+r2
+                self.best_reward = r1+r2+r3
 
-            print("\nr1: {}, r2: {}\n".format(r1, r2))
+            print("\nr1: {}, r2: {}, r3: {}\n".format(r1, r2, r3))
             with open("./runs/{}/println.txt".format(self.run_name), 'a') as f:
-                print("\nr1: {}, r2: {}\n".format(r1, r2), file=f)   
+                print("\nr1: {}, r2: {}, r3: {}\n".format(r1, r2, r3), file=f)
 
             plt.cla()
             draw_z(
@@ -325,7 +349,7 @@ class DREnv(Env):
                 s=1, 
                 save_path=os.path.join(self.save_path, name), 
                 display=False, 
-                title=name + " reward: {:.4f}+{:.4f}".format(r1.item(), r2.item()), 
+                title=name + " reward: {:.4f}+{:.4f}+{:.4f}".format(r1.item(), r2.item(), r3.item()), 
                 palette='Spectral' # None
             )
             print("img saved to {}".format(os.path.join(self.save_path, name)))
@@ -358,7 +382,7 @@ class DREnv(Env):
             #     )
             #     print("img saved to {}".format(os.path.join(self.save_path, "20k_iter{}_step{}".format(self.iteration, self.step))))
 
-            return r1 + r2
+            return r1 + r2 + r3
 
     def transition(self, action, partition):
         """
