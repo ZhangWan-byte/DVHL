@@ -30,7 +30,7 @@ def draw_Ihat(I_hat):
     plt.show()
 
 
-def draw_z(z, cls, s=25, x_highlight=None, y_highlight=None, save_path=None, display=True, title=None, palette="Spectral"):
+def draw_z(z, cls, s=25, x_highlight=None, y_highlight=None, save_path=None, display=True, title=None, palette="Spectral", dpi=600):
     """draw data and labels
 
     :param z: (n, 2) -- 2D data
@@ -48,7 +48,7 @@ def draw_z(z, cls, s=25, x_highlight=None, y_highlight=None, save_path=None, dis
     tsne_df = tsne_df.sort_values("label")
 
     # draw
-    plt.figure(figsize=(10, 10), dpi=1500)
+    plt.figure(figsize=(10, 10), dpi=dpi)
     
     # main figure
     sn.FacetGrid(tsne_df, hue="label", height=6, palette=palette).map(plt.scatter, "Dim_1", "Dim_2", s=s).add_legend()
@@ -57,7 +57,7 @@ def draw_z(z, cls, s=25, x_highlight=None, y_highlight=None, save_path=None, dis
         plt.scatter(x_highlight, y_highlight, marker='*', s=20, c='black', label='Highlighted Point')
 
     # dpi    
-    matplotlib.rcParams["figure.dpi"] = 1500
+    matplotlib.rcParams["figure.dpi"] = dpi
     
     # axes range
     plt.xlim((0, 1))
@@ -73,7 +73,7 @@ def draw_z(z, cls, s=25, x_highlight=None, y_highlight=None, save_path=None, dis
         plt.show()
     else:
         plt.ioff()
-        plt.clf()   
+        plt.clf()
         plt.close()
 
 
