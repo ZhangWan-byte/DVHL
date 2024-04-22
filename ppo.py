@@ -595,6 +595,12 @@ def main():
             actual_num_steps = step
             actual_batch_size = step
         else:
+            actions = actions_0
+            logprobs = logprobs_0
+            values = values_0
+            rewards = rewards_0
+            dones = dones_0
+
             actual_num_steps = args.num_steps
             actual_batch_size = args.batch_size
 
