@@ -717,7 +717,7 @@ def main():
         writer.add_scalar("losses/approx_kl", approx_kl.mean().item(), global_step)
         writer.add_scalar("losses/clipfrac", np.mean(clipfracs), global_step)
         writer.add_scalar("losses/explained_variance", explained_var, global_step)
-        writer.add_scalar("losses/rewards", envs.history_rewards[-actual_num_steps:], global_step)
+        writer.add_scalar("losses/rewards", envs.history_rewards[-actual_num_steps:].mean().item(), global_step)
 
         now_time = time.time()
         print("SPS:", int(global_step / (now_time - start_time)))
