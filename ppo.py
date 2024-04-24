@@ -451,7 +451,7 @@ def main():
     envs = DREnv(
         data.astype('float32'), 
         labels.astype('float32'), 
-        model_path="./exp1/model_dropout.pt",  
+        model_path="./exp1/model_online.pt",  
         action_space=27, 
         history_len=7, 
         save_path=f"./runs/{run_name}", 
@@ -729,8 +729,8 @@ def main():
             torch.save(agent.state_dict(), "./runs/{}/best_epoch_agent.pt".format(run_name))
             envs.best_epoch_reward = torch.sum(envs.history_rewards[-actual_num_steps:])
         torch.save(agent.state_dict(), "./runs/{}/agent.pt".format(run_name))
-        torch.save(envs.history_rewards, "./runs/{}/history_rewards.pt".format(run_name))
-        torch.save(envs.history_actions, "./runs/{}/history_actions.pt".format(run_name))
+        torch.save(envs.history_rewards.detach().cpu(), "./runs/{}/history_rewards.pt".format(run_name))
+        torch.save(envs.history_actions.detach().cpu(), "./runs/{}/history_actions.pt".format(run_name))
     
         torch.cuda.empty_cache()
         gc.collect()

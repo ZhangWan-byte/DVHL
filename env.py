@@ -60,7 +60,7 @@ class SiameseNet(nn.Module):
 
 
 class DREnv(Env):
-    def __init__(self, x, label, model_path="./exp1/model_CosAnneal1.pt", action_space=27, history_len=7, save_path=None, num_steps=32, num_partition=20, size=256, run_name=None, inference=False, data=None, labels=None, idx=None, r3_coef=3):
+    def __init__(self, x, label, model_path="./exp1/model_online.pt", action_space=27, history_len=7, save_path=None, num_steps=32, num_partition=20, size=256, run_name=None, inference=False, data=None, labels=None, idx=None, r3_coef=3):
         self.x = x
         self.label = label
         self.best_reward = 0
@@ -92,10 +92,9 @@ class DREnv(Env):
 
         # human surrogate
         self.model = SiameseNet(
-            hidden=64, 
+            hidden=256, #64, 
             block=BasicBlock, 
-            num_block=[1,1,1,1], 
-            num_classes=5, 
+            num_block=[3,4,6,3], #[1,1,1,1], 
             in_channels=1, 
             out_channels=[10, 16, 24, 32]
         ).cuda()
@@ -154,8 +153,8 @@ class DREnv(Env):
         if initial==True:
 
             n_neighbors = np.round(np.ones(x.shape[0]) * 15).astype(np.int32) #None
-            MN_ratio = np.ones(x.shape[0]) * 2.0 # 0.5
-            FP_ratio = np.ones(x.shape[0]) * 20.0 # 2.0
+            MN_ratio = np.ones(x.shape[0]) * 2.0 #0.5 #2.0 # 0.5
+            FP_ratio = np.ones(x.shape[0]) * 10.0 #1.0 #20.0 # 2.0
 
         num_nodes = x.shape[0]
 
@@ -331,8 +330,8 @@ class DREnv(Env):
             # update last and best vis
             self.last_z = z
             # if r1+r2 > self.best_reward:
-            # if out2_mean>0.5 and out2_var<0.02:
-            if r1>0 and r2>0:
+            if torch.mean(self.out2)>0.5 and torch.var(self.out2)<0.02:
+            # if r1>0 and r2>0:
                 self.best_z = z
                 self.best_z0 = z0
                 self.best_name = name
