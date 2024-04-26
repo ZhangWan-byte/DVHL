@@ -330,8 +330,10 @@ class DREnv(Env):
             length_improve = torch.tensor([self.coef / length]).cuda()
             r3 = length_improve - self.last_length_improve
 
-            # update last and best vis
+            # update last and best
+            self.last_length_improve = r3
             self.last_z = z
+            
             # if r1+r2 > self.best_reward:
             if torch.mean(self.out2)>0.5 and torch.var(self.out2)<0.02:
             # if r1>0 and r2>0:
