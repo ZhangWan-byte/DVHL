@@ -89,6 +89,7 @@ class DREnv(Env):
 
         self.num_partition = num_partition
         self.coef = r3_coef
+        self.last_length_improve = torch.tensor([0.]).to(self.device)
 
         # human surrogate
         self.model = SiameseNet(
@@ -109,7 +110,7 @@ class DREnv(Env):
             self.alpha_values = [0.8, 1.0, 1.2]                # value range of ratio of kNN
             self.beta_values = [0.8, 1.0, 1.2]                 # value range of ratio of mid-pairs
             self.gamma_values = [0.8, 1.0, 1.2]                # value range of ratio of negatives
-            # self.hetero_homo = [0, 1, 2]                       # 0 - random / 1 - hetero / 2 - homo
+            # self.hetero_homo = [0, 1, 2]                     # 0 - random / 1 - hetero / 2 - homo
         else:
             self.alpha_values = [0.5, 1.0, 2.0]                # value range of ratio of kNN
             self.beta_values = [0.5, 1.0, 2.0]                 # value range of ratio of mid-pairs
@@ -127,15 +128,16 @@ class DREnv(Env):
 
         # record during training
         self.best_epoch_reward = 0
-        self.history_rewards = torch.tensor([]).to(self.device)
+        self.history_rewards = torch.tensor([0.]).to(self.device)
 
         # history: actions / effect
         self.history_len = history_len
         self.history_actions = torch.zeros((history_len, self.num_partition)).to(self.device)
+        self.diff_reward = torch.zeros([1]).to(self.device)
         self.effect_history_actions = torch.zeros([1]).to(self.device)
 
         # like a sentence, abcdefg0 / fdsjkhy1, each character is one_hot
-        self.history = [self.history_actions, self.effect_history_actions]
+        self.history = [self.history_actions, self.effect_history_actions, self.diff_reward]
         self.history_feedbacks = []
 
         self.save_path = save_path
@@ -325,7 +327,8 @@ class DREnv(Env):
 
             # r3: MST length
             length = self.MST_length(z0)
-            r3 = torch.tensor([self.coef / length]).cuda()
+            length_improve = torch.tensor([self.coef / length]).cuda()
+            r3 = length_improve - self.last_length_improve
 
             # update last and best vis
             self.last_z = z
@@ -419,11 +422,14 @@ class DREnv(Env):
 
         self.history_rewards = torch.hstack([self.history_rewards, reward])                                     # update history rewards
 
-        if reward > self.history_rewards[max(-self.history_len, -len(self.history_rewards))]:                   # add history info to state
+        if sum(self.history_rewards[-min(self.step+1, self.history_len):]) > 0:                                      # add history info to state
             self.effect_history_actions = torch.tensor([1]).cuda()
         else:
             self.effect_history_actions = torch.tensor([0]).cuda()
-        self.history = [self.history_actions[-self.history_len:, :], self.effect_history_actions]
+
+        self.diff_reward = reward - self.history_rewards[-2]
+
+        self.history = [self.history_actions[-min(self.step+1, self.history_len):, :], self.effect_history_actions, self.diff_reward]
 
         state["history"] = [i.to(self.device) for i in self.history]
 

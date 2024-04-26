@@ -169,9 +169,9 @@ class GAT(torch.nn.Module):
         self.pooling = MultiheadAttention(embed_dim=hidden, num_heads=4)
 
         # history feature
-        # self.gru = nn.GRU(input_size=num_actions+2, hidden_size=hidden, num_layers=1)
+        self.gru = nn.GRU(input_size=self.num_actions, hidden_size=hidden, num_layers=2, batch_first=True)
         self.history_mlp = nn.Sequential(
-            layer_init(nn.Linear(in_features=history_len*num_partition+1, out_features=hidden), std=std, jianhong_advice=jianhong_advice),
+            layer_init(nn.Linear(in_features=self.hidden+2, out_features=hidden), std=std, jianhong_advice=jianhong_advice),
             nn.LeakyReLU(),
             nn.Dropout(p=0.5), 
             layer_init(nn.Linear(in_features=hidden, out_features=hidden), std=std, jianhong_advice=jianhong_advice),
@@ -209,21 +209,26 @@ class GAT(torch.nn.Module):
         
         x = self.conv3(x, edge_index, edge_attr)
 
-        x = self.cluster_means(x[:-1, :], partition)                                        # (num_partition, hidden)
+        x = self.cluster_means(x[:-1, :], partition)                                                        # (num_partition, hidden)
 
-        x, _ = self.pooling(x, x, x)                                                        # (num_partition, hidden)
+        x, _ = self.pooling(x, x, x)                                                                        # (num_partition, hidden)
 
         # History features
-        history_actions, effect_history_actions = state["history"]
-        history = torch.cat([history_actions.flatten(), effect_history_actions], dim=0)     # (history_len*num_partition+1, )
-        out = self.history_mlp(history).view(1, -1)                                         # (1, hidden)
+        history_actions, effect_history_actions, diff_reward = state["history"]
+        print(history_actions.shape)
+        history_actions, _ = self.gru(F.one_hot(history_actions.flatten().long(), num_classes=self.num_actions).float()) # (1, hidden)
+        # history_actions, _ = self.gru(history_actions)
+        print(history_actions.shape)
+        history_actions = torch.mean(history_actions, dim=0)
+        print(history_actions.shape)
+        history = torch.cat([history_actions.view(1,-1), effect_history_actions.view(1,-1), diff_reward.view(1,-1)], dim=1).float()
+        print(history.shape)
+        history = self.history_mlp(history)
 
         # Prediction head
-        out = torch.cat([x, out], dim=0)                                                    # (num_partition+1, hidden)
-        out = self.head(out.flatten())                                                      # (1, num_partition*out_dim)
+        out = torch.cat([x, history], dim=0)                                                                    # (num_partition+1, hidden)
+        out = self.head(out.flatten())                                                                      # (1, num_partition*out_dim)
 
-        # if self.actor==1:            
-        #     out = out.view(self.num_partition, self.out_dim)
         out = out.view(self.num_partition, self.out_dim)                # TODO
 
         return out
