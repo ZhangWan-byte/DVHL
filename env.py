@@ -90,6 +90,7 @@ class DREnv(Env):
         self.num_partition = num_partition
         self.coef = r3_coef
         self.last_length_improve = torch.tensor([0.]).to(self.device)
+        self.history_lengths = torch.tensor([]).to(self.device)
 
         # human surrogate
         self.model = SiameseNet(
@@ -331,8 +332,10 @@ class DREnv(Env):
             r3 = length_improve - self.last_length_improve
 
             # update last and best
-            self.last_length_improve = r3
+            self.last_length_improve = length_improve
             self.last_z = z
+            
+            self.history_lengths.append(length_improve)
             
             # if r1+r2 > self.best_reward:
             if torch.mean(self.out2)>0.5 and torch.var(self.out2)<0.02:
