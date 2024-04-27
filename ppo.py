@@ -215,14 +215,14 @@ class GAT(torch.nn.Module):
 
         # History features
         history_actions, effect_history_actions, diff_reward = state["history"]
-        print(history_actions.shape)
+
         history_actions, _ = self.gru(F.one_hot(history_actions.flatten().long(), num_classes=self.num_actions).float()) # (1, hidden)
         # history_actions, _ = self.gru(history_actions)
-        print(history_actions.shape)
+
         history_actions = torch.mean(history_actions, dim=0)
-        print(history_actions.shape)
+
         history = torch.cat([history_actions.view(1,-1), effect_history_actions.view(1,-1), diff_reward.view(1,-1)], dim=1).float()
-        print(history.shape)
+
         history = self.history_mlp(history)
 
         # Prediction head

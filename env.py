@@ -89,7 +89,7 @@ class DREnv(Env):
 
         self.num_partition = num_partition
         self.coef = r3_coef
-        self.last_length_improve = torch.tensor([0.]).to(self.device)
+        self.last_length_reward = torch.tensor([0.]).to(self.device)
         self.history_lengths = torch.tensor([]).to(self.device)
 
         # human surrogate
@@ -328,14 +328,14 @@ class DREnv(Env):
 
             # r3: MST length
             length = self.MST_length(z0)
-            length_improve = torch.tensor([self.coef / length]).cuda()
-            r3 = length_improve - self.last_length_improve
+            length_reward = torch.tensor([self.coef / length]).cuda()
+            r3 = length_reward - self.last_length_reward
 
             # update last and best
-            self.last_length_improve = length_improve
+            self.last_length_reward = length_reward
             self.last_z = z
             
-            self.history_lengths.append(length_improve)
+            self.history_lengths = torch.hstack([self.history_lengths, length_reward])
             
             # if r1+r2 > self.best_reward:
             if torch.mean(self.out2)>0.5 and torch.var(self.out2)<0.02:
