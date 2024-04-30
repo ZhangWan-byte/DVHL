@@ -100,7 +100,7 @@ class DREnv(Env):
             in_channels=1, 
             out_channels=[10, 16, 24, 32]
         ).to(self.device)
-        self.model.load_state_dict(torch.load(model_path))
+        self.model.load_state_dict(torch.load(model_path, map_location=self.device))
         print("human surrogate params: ", sum([p.numel() for p in self.model.parameters()]))
         with open("./runs/{}/println.txt".format(self.run_name), 'a') as f:
             print("human surrogate params: ", sum([p.numel() for p in self.model.parameters()]), file=f)
