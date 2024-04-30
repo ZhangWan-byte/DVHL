@@ -99,7 +99,7 @@ class DREnv(Env):
             num_block=[3,4,6,3], #[1,1,1,1], 
             in_channels=1, 
             out_channels=[10, 16, 24, 32]
-        ).cuda()
+        ).to(self.device)
         self.model.load_state_dict(torch.load(model_path))
         print("human surrogate params: ", sum([p.numel() for p in self.model.parameters()]))
         with open("./runs/{}/println.txt".format(self.run_name), 'a') as f:
@@ -307,7 +307,7 @@ class DREnv(Env):
             self.model.train()
 
             z = get_Ihat(normalise(z0), size=self.size)
-            z = torch.from_numpy(z).view(1,1,self.size,self.size).float().cuda()
+            z = torch.from_numpy(z).view(1,1,self.size,self.size).float().to(self.device)
             
             # r1: compared to last vis
             for out_idx in range(10):
@@ -328,7 +328,7 @@ class DREnv(Env):
 
             # r3: MST length
             length = self.MST_length(z0)
-            length_reward = torch.tensor([self.coef / length]).cuda()
+            length_reward = torch.tensor([self.coef / length]).to(self.device)
             r3 = length_reward - self.last_length_reward
 
             # update last and best
@@ -428,9 +428,9 @@ class DREnv(Env):
         self.history_rewards = torch.hstack([self.history_rewards, reward])                                     # update history rewards
 
         if sum(self.history_rewards[-min(self.step+1, self.history_len):]) > 0:                                      # add history info to state
-            self.effect_history_actions = torch.tensor([1]).cuda()
+            self.effect_history_actions = torch.tensor([1]).to(self.device)
         else:
-            self.effect_history_actions = torch.tensor([0]).cuda()
+            self.effect_history_actions = torch.tensor([0]).to(self.device)
 
         self.diff_reward = reward - self.history_rewards[-2]
 
@@ -487,7 +487,7 @@ class DREnv(Env):
             n_FP=np.round(self.current_state["FP_ratio"] * self.current_state["n_neighbors"]).astype(np.int32)
         )
         z = get_Ihat(normalise(z0), size=self.size)
-        z = torch.from_numpy(z).view(1,1,self.size,self.size).float().cuda()
+        z = torch.from_numpy(z).view(1,1,self.size,self.size).float().to(self.device)
 
         plt.cla()
         draw_z(
