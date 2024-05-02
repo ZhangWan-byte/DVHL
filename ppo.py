@@ -323,8 +323,8 @@ class Agent(nn.Module):
             self.actor.load_state_dict(torch.load(actor_path))
 
         if use_multi_gpu:
-            self.critic = torch.nn.DataParallel(critic, device_ids=[0, 1])
-            self.actor = torch.nn.DataParallel(critic, device_ids=[0, 1])
+            self.critic = torch.nn.DataParallel(self.critic, device_ids=[0, 1])
+            self.actor = torch.nn.DataParallel(self.actor, device_ids=[0, 1])
 
         self.device = device
 
