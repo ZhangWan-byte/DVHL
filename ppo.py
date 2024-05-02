@@ -323,8 +323,8 @@ class Agent(nn.Module):
             self.actor.load_state_dict(torch.load(actor_path))
 
         if use_multi_gpu:
-            self.critic = torch.nn.DataParallel(self.critic, device_ids=[0, 1])
-            self.actor = torch.nn.DataParallel(self.actor, device_ids=[0, 1])
+            self.critic = torch.nn.DataParallel(self.critic)
+            self.actor = torch.nn.DataParallel(self.actor)
 
         self.device = device
 
@@ -434,7 +434,7 @@ def main():
     torch.manual_seed(args.seed)
     torch.backends.cudnn.deterministic = args.torch_deterministic
 
-    device = torch.device("cuda:0" if torch.cuda.is_available() and args.cuda else "cpu")
+    device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
     use_multi_gpu = True if torch.cuda.device_count()>1 else False
     print("device: ", device)
     print("device num: ", torch.cuda.device_count())
