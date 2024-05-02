@@ -247,6 +247,13 @@ class GAT(torch.nn.Module):
         return cluster_means
 
 
+def forward_pass_single_model(params):
+    model, state, partition = params
+    
+    with torch.no_grad():
+        return model(state, partition)
+
+
 class PolicyEnsemble(nn.Module):
     def __init__(self, num_models, num_node_features, hidden, num_actions, out_dim, std, history_len, num_partition, device):
         super().__init__()
@@ -269,11 +276,14 @@ class PolicyEnsemble(nn.Module):
         indices = np.random.choice(len(self.base_models), round(len(self.base_models)*0.8), replace=False)
 
         results = []
-        for i, base_model in enumerate(self.base_models):
-            if i not in indices:
-                continue
-            out = base_model(state, partition)                  # (num_partition, out_dim)
-            results.append(out)
+        # for i, base_model in enumerate(self.base_models):
+        #     if i not in indices:
+        #         continue
+        #     out = base_model(state, partition)                  # (num_partition, out_dim)
+        #     results.append(out)
+
+        with mp.Pool() as pool:
+            results = pool.map(forward_pass_single_model, [(model, state, partition) for model in self.base_models])
 
         results = torch.stack(results, dim=0).mean(dim=0)       # (num_partition, out_dim)
 
