@@ -192,11 +192,16 @@ class GAT(torch.nn.Module):
             layer_init(nn.Linear(in_features=hidden, out_features=num_partition * self.out_dim), std=std, jianhong_advice=jianhong_advice)       # TODO
         )
 
-    def forward(self, state, partition=None):
+    def forward(self, state, partition=None, inference=False):
 
         x, edge_index, edge_attr = state["x"].float(), state["edge_index"].long(), state["edge_attr"].float()
 
         n, f = x.shape[0], self.hidden
+
+        if inference:
+            x = x.unsqueeze(0)
+            edge_index = unsqueeze(0)
+            edge_attr = unsqueeze(0)
 
         # Graph features
         x = self.conv1(x, edge_index, edge_attr)
@@ -222,6 +227,9 @@ class GAT(torch.nn.Module):
         history_actions = torch.mean(history_actions, dim=0)
 
         history = torch.cat([history_actions.view(1,-1), effect_history_actions.view(1,-1), diff_reward.view(1,-1)], dim=1).float()
+
+        if inference:
+            history = history.unsqueeze(0)
 
         history = self.history_mlp(history)
 
@@ -348,7 +356,7 @@ class Agent(nn.Module):
             ent = []
             value = []
             for i in range(len(state)):
-                logits = self.actor(state[i], partition)
+                logits = self.actor(state[i], partition, inference=inference)
                 # print("logits: ", logits)
                 probs = Categorical(logits=logits)
                 if action is None:
@@ -368,12 +376,12 @@ class Agent(nn.Module):
             # print("probs: ", pbs)
             return ac, pbs, ent, value
         else:
-            logits = self.actor(state, partition)
+            logits = self.actor(state, partition, inference=inference)
             probs = Categorical(logits=logits)
             if action is None:
                 action = probs.sample()
             
-            return action, probs.log_prob(action), probs.entropy(), self.critic(state, partition)
+            return action, probs.log_prob(action), probs.entropy(), self.critic(state, partition, inference=inference)
 
 def get_partition(data, k=20, labels=None):
     if labels==None:
