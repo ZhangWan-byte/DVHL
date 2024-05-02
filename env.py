@@ -505,4 +505,7 @@ class DREnv(Env):
         self.best_z = z
         self.best_z0 = z0
 
+        length = self.MST_length(z0)
+        self.last_length_reward = torch.tensor([self.coef / length]).to(self.device)
+
         return self.current_state
