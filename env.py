@@ -60,7 +60,7 @@ class SiameseNet(nn.Module):
 
 
 class DREnv(Env):
-    def __init__(self, x, label, model_path="./exp1/model_online.pt", action_space=27, history_len=7, save_path=None, num_steps=32, num_partition=20, size=256, run_name=None, inference=False, data=None, labels=None, idx=None, r3_coef=3):
+    def __init__(self, x, label, model_path="./exp1/model_online.pt", action_space=27, history_len=7, save_path=None, num_steps=32, num_partition=20, size=256, run_name=None, inference=False, data=None, labels=None, idx=None, r3_coef=3, device=torch.device('cpu')):
         self.x = x
         self.label = label
         self.best_reward = 0
@@ -80,7 +80,7 @@ class DREnv(Env):
         self.current_state = None
         self.action_space = action_space
 
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.device = device
         self.done_list = [torch.tensor(0).to(self.device), torch.tensor(1).to(self.device)]
         self.out1 = torch.zeros((10, 1)).to(self.device)
         self.out2 = torch.zeros((10, 1)).to(self.device)

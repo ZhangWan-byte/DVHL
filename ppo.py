@@ -150,7 +150,7 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0, jianhong_advice=False):
 
 
 class GAT(torch.nn.Module):
-    def __init__(self, num_node_features=50, hidden=32, num_actions=27, out_dim=1, std=1.0, history_len=7, num_partition=20, device=torch.device('cuda' if torch.cuda.is_available() else 'cpu'), jianhong_advice=False):
+    def __init__(self, num_node_features=50, hidden=32, num_actions=27, out_dim=1, std=1.0, history_len=7, num_partition=20, device=torch.device('cuda:0' if torch.cuda.is_available() else 'cpu'), jianhong_advice=False):
         super().__init__()
         self.hidden = hidden
         self.num_actions = num_actions
@@ -275,7 +275,7 @@ class PolicyEnsemble(nn.Module):
 
 
 class Agent(nn.Module):
-    def __init__(self, envs, num_policy=6, num_node_features=50, hidden=64, history_len=7, num_actions=27, num_partition=None, device=torch.device('cuda' if torch.cuda.is_available() else 'cpu'), actor_path=None, critic_path=None):
+    def __init__(self, envs, num_policy=6, num_node_features=50, hidden=64, history_len=7, num_actions=27, num_partition=None, device=torch.device('cuda:0' if torch.cuda.is_available() else 'cpu'), actor_path=None, critic_path=None, use_multi_gpu=False):
         super().__init__()
 
         # self.critic = GAT(
@@ -322,13 +322,25 @@ class Agent(nn.Module):
         if actor_path is not None:
             self.actor.load_state_dict(torch.load(actor_path))
 
+        if use_multi_gpu:
+            self.critic = torch.nn.DataParallel(critic, device_ids=[0, 1])
+            self.actor = torch.nn.DataParallel(critic, device_ids=[0, 1])
+
         self.device = device
 
     def get_value(self, state, partition=None):
 
         return self.critic(state, partition)
 
-    def get_action_and_value(self, state, action=None, partition=None):
+    def get_action_and_value(self, state, action=None, partition=None, inference=False):
+
+        if inference:
+            self.critic.eval()
+            self.actor.eval()
+        else:
+            self.critic.train()
+            self.actor.train()
+
 
         if type(state)==type([]):
             ac = []
@@ -422,7 +434,10 @@ def main():
     torch.manual_seed(args.seed)
     torch.backends.cudnn.deterministic = args.torch_deterministic
 
-    device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
+    device = torch.device("cuda:0" if torch.cuda.is_available() and args.cuda else "cpu")
+    use_multi_gpu = True if torch.cuda.device_count()>1 else False
+    print("device: ", device)
+    print("device num: ", torch.cuda.device_count())
 
     # data generation
 
@@ -462,7 +477,8 @@ def main():
         save_path=f"./runs/{run_name}", 
         num_steps = args.num_steps, 
         num_partition=num_partition, 
-        run_name=run_name
+        run_name=run_name, 
+        device=device
     )
 
     agent = Agent(
@@ -472,7 +488,8 @@ def main():
         hidden=32, 
         history_len=7, 
         num_actions=27, 
-        num_partition=num_partition
+        num_partition=num_partition, 
+        use_multi_gpu=use_multi_gpu
     ).to(device)
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
@@ -526,7 +543,7 @@ def main():
                 cnt = 0
                 # handle accident or illegal situation
                 while True:
-                    action, logprob, _, value = agent.get_action_and_value(next_obs, partition=partition)
+                    action, logprob, _, value = agent.get_action_and_value(next_obs, partition=partition, inference=True)
                     hp = envs.combinations[action.detach().cpu() % len(envs.combinations)]
                     alpha, beta, gamma = hp[:, 0], hp[:, 1], hp[:, 2]
 
@@ -543,7 +560,8 @@ def main():
                     MN_ratio = beta * envs.current_state["MN_ratio"]
                     FP_ratio = gamma * envs.current_state["FP_ratio"]
 
-                    torch.cuda.empty_cache()
+                    if args.cuda:
+                        torch.cuda.empty_cache()
                     gc.collect()
 
                     cnt += 1
@@ -585,7 +603,8 @@ def main():
                     writer.add_scalar("charts/episodic_return", infos["episode"]["r"], global_step)
                     writer.add_scalar("charts/episodic_length", infos["episode"]["l"], global_step)      
 
-        torch.cuda.empty_cache()
+        if args.cuda:
+            torch.cuda.empty_cache()
         gc.collect()
 
         # truncate redundant null steps
@@ -650,7 +669,7 @@ def main():
                 b_obs_i = [b_obs[i] for i in mb_inds]
                 b_actions_i = b_actions.long()[mb_inds]
 
-                _, newlogprob, entropy, newvalue = agent.get_action_and_value(b_obs_i, b_actions_i, partition=partition)
+                _, newlogprob, entropy, newvalue = agent.get_action_and_value(b_obs_i, b_actions_i, partition=partition, inference=False)
                 # print("newlogprob: {}, b_logprobs[mb_inds]: {}, mb_inds: {}".format(newlogprob, b_logprobs[mb_inds], mb_inds))
                 with open("./runs/{}/println.txt".format(run_name), 'a') as f:
                     print("newlogprob: {}, b_logprobs[mb_inds]: {}, mb_inds: {}".format(newlogprob, b_logprobs[mb_inds], mb_inds), file=f)
@@ -737,7 +756,8 @@ def main():
         torch.save(envs.history_rewards.detach().cpu(), "./runs/{}/history_rewards.pt".format(run_name))
         torch.save(envs.history_actions.detach().cpu(), "./runs/{}/history_actions.pt".format(run_name))
     
-        torch.cuda.empty_cache()
+        if args.cuda:
+            torch.cuda.empty_cache()
         gc.collect()
 
         # envs.update_surrogate(iteration)
