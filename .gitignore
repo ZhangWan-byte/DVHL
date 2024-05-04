@@ -6,6 +6,7 @@
 *.pyc
 *.npy
 *.pt
+!/exp1/model_online.pt
 02-policy-gradient.ipynb
 *.png
 /runs
