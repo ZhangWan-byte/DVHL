@@ -276,14 +276,14 @@ class PolicyEnsemble(nn.Module):
         indices = np.random.choice(len(self.base_models), round(len(self.base_models)*0.8), replace=False)
 
         results = []
-        # for i, base_model in enumerate(self.base_models):
-        #     if i not in indices:
-        #         continue
-        #     out = base_model(state, partition)                  # (num_partition, out_dim)
-        #     results.append(out)
+        for i, base_model in enumerate(self.base_models):
+            if i not in indices:
+                continue
+            out = base_model(state, partition)                  # (num_partition, out_dim)
+            results.append(out)
 
-        with mp.Pool() as pool:
-            results = pool.map(forward_pass_single_model, [(model, state, partition) for model in self.base_models])
+        # with mp.Pool() as pool:
+        #     results = pool.map(forward_pass_single_model, [(model, state, partition) for model in self.base_models])
 
         results = torch.stack(results, dim=0).mean(dim=0)       # (num_partition, out_dim)
 
