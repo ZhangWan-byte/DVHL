@@ -228,6 +228,7 @@ class GAT(torch.nn.Module):
 
         # History features
         history_actions, history_r1, diff_reward = state["history"]
+        history_actions = history_actions[-self.history_len:]
 
         history_actions, _ = self.gru(F.one_hot(history_actions.flatten().long(), num_classes=self.num_actions+1).float()) # (1, hidden)
         # history_actions, _ = self.gru(history_actions)
