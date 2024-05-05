@@ -15,7 +15,14 @@ import itertools
 import time
 
 import networkx as nx
+from scipy.spatial.distance import pdist, squareform
+
 from sklearn.neighbors import kneighbors_graph
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.linear_model import LinearRegression
+from sklearn.decomposition import PCA
+from sklearn.cluster import AgglomerativeClustering
+from sklearn.metrics import mean_squared_error
 
 # from memory_profiler import profile
 
@@ -60,11 +67,12 @@ class SiameseNet(nn.Module):
 
 
 class DREnv(Env):
-    def __init__(self, x, label, model_path="./exp1/model_online.pt", action_space=27, history_len=7, save_path=None, num_steps=32, num_partition=20, size=256, run_name=None, inference=False, data=None, labels=None, idx=None, r3_coef=3, device=torch.device('cpu')):
+    def __init__(self, x, label, model_path="./exp1/model_online.pt", action_space=27, history_len=7, save_path=None, num_steps=32, num_partition=20, size=256, run_name=None, inference=False, data=None, labels=None, idx=None, r3_coef=3, device=torch.device('cpu'), reward_func='decision-making', draw=True):
         self.x = x
         self.label = label
-        self.best_reward = 0
-        self.best_feedback = 0
+
+        self.draw = draw
+
         self.name = None
         self.best_name = None
         self.size = size
@@ -82,29 +90,45 @@ class DREnv(Env):
 
         self.device = device
         self.done_list = [torch.tensor(0).to(self.device), torch.tensor(1).to(self.device)]
-        self.out1 = torch.zeros((10, 1)).to(self.device)
-        self.out2 = torch.zeros((10, 1)).to(self.device)
         self.zero = torch.tensor([0.]).to(self.device)
         self.one = torch.tensor([1.]).to(self.device)
+        self.reward = torch.tensor([0.]).to(self.device)
 
         self.num_partition = num_partition
-        self.coef = r3_coef
-        self.last_length_reward = torch.tensor([0.]).to(self.device)
-        self.history_lengths = torch.tensor([]).to(self.device)
 
-        # human surrogate
-        self.model = SiameseNet(
-            hidden=256, #64, 
-            block=BasicBlock, 
-            num_block=[3,4,6,3], #[1,1,1,1], 
-            in_channels=1, 
-            out_channels=[10, 16, 24, 32]
-        ).to(self.device)
-        self.model.load_state_dict(torch.load(model_path, map_location=self.device))
-        print("human surrogate params: ", sum([p.numel() for p in self.model.parameters()]))
-        with open("./runs/{}/println.txt".format(self.run_name), 'a') as f:
-            print("human surrogate params: ", sum([p.numel() for p in self.model.parameters()]), file=f)
-        self.model.train()
+        # objective surrogate
+        self.reward_func = reward_func
+        
+        if reward_func == 'human-vis':
+            self.model = SiameseNet(
+                hidden=256, #64, 
+                block=BasicBlock, 
+                num_block=[3,4,6,3], #[1,1,1,1], 
+                in_channels=1, 
+                out_channels=[10, 16, 24, 32]
+            ).to(self.device)
+            self.model.load_state_dict(torch.load(model_path, map_location=self.device))
+            print("human surrogate params: ", sum([p.numel() for p in self.model.parameters()]))
+            with open("./runs/{}/println.txt".format(self.run_name), 'a') as f:
+                print("human surrogate params: ", sum([p.numel() for p in self.model.parameters()]), file=f)
+            self.model.train()
+
+            self.out1 = torch.zeros((10, 1)).to(self.device)
+            self.out2 = torch.zeros((10, 1)).to(self.device)
+
+            self.coef = r3_coef
+            self.last_length_reward = torch.tensor([0.]).to(self.device)
+            self.history_lengths = torch.tensor([]).to(self.device)
+
+        elif reward_func == 'decision-making':
+            self.best_mse = np.inf
+            self.last_mse = np.inf
+
+        elif reward_func == 'human-dm':
+            pass
+
+        else:
+            pass
 
         # actions
         if self.inference==False:
@@ -155,9 +179,9 @@ class DREnv(Env):
         """
         if initial==True:
 
-            n_neighbors = np.round(np.ones(x.shape[0]) * 15).astype(np.int32) #None
-            MN_ratio = np.ones(x.shape[0]) * 2.0 #0.5 #2.0 # 0.5
-            FP_ratio = np.ones(x.shape[0]) * 10.0 #1.0 #20.0 # 2.0
+            n_neighbors = np.round(np.ones(x.shape[0]) * 20).astype(np.int32) #None
+            MN_ratio = np.ones(x.shape[0]) * 1.0 #0.5 #2.0 # 0.5
+            FP_ratio = np.ones(x.shape[0]) * 5.0 #1.0 #20.0 # 2.0
 
         num_nodes = x.shape[0]
 
@@ -253,18 +277,13 @@ class DREnv(Env):
         return r
 
     def MST_length(self, z, k=5):
-        
-        z = normalise(z)
 
-        # A = kneighbors_graph(z, n_neighbors=k, mode='connectivity', metric='euclidean', include_self=False)
-        A = kneighbors_graph(z, n_neighbors=k, mode='distance', metric='euclidean', include_self=False)
-        # A[A > 0.002] = 0
+        A = kneighbors_graph(normalise(z), n_neighbors=k, mode='distance', metric='euclidean', include_self=False)
 
         G = nx.Graph(A)
 
         MST = nx.minimum_spanning_tree(G)
         length = sum(weight for _, _, weight in MST.edges(data='weight'))
-        # print("MST length: ", length)
 
         return length
 
@@ -282,9 +301,9 @@ class DREnv(Env):
             )
 
             name = "iter{}_step{}".format(self.iteration, self.step)
-            print("\n\n{} fit-transforming...".format(name))
-            with open("./runs/{}/println.txt".format(self.run_name), 'a') as f:
-                print("\n\n{} fit-transforming...".format(name), file=f)
+            # print("\n\n{} fit-transforming...".format(name))
+            # with open("./runs/{}/println.txt".format(self.run_name), 'a') as f:
+            #     print("\n\n{} fit-transforming...".format(name), file=f)
 
             t1 = time.time()
             z0 = self.reducer.fit_transform(
@@ -294,72 +313,157 @@ class DREnv(Env):
                 n_FP=np.round(state["FP_ratio"] * state["n_neighbors"]).astype(np.int32)
             )
             t2 = time.time()
-            print("time used for fit-transform: {} s".format(t2-t1))
-            with open("./runs/{}/println.txt".format(self.run_name), 'a') as f:
-                print("time used for fit-transform: {} s".format(t2-t1), file=f)
 
-            torch.save(torch.from_numpy(z0), os.path.join(self.save_path, "z_{}.pt".format(name)))
-            print("z saved to: {}".format(os.path.join(self.save_path, "z_{}.pt".format(name))))
-            with open("./runs/{}/println.txt".format(self.run_name), 'a') as f:
-                print("z saved to: {}".format(os.path.join(self.save_path, "z_{}.pt".format(name))), file=f)
+            # print("time used for fit-transform: {} s".format(t2-t1))
+            # with open("./runs/{}/println.txt".format(self.run_name), 'a') as f:
+            #     print("time used for fit-transform: {} s".format(t2-t1), file=f)
 
-
-            self.model.train()
-
-            z = get_Ihat(normalise(z0), size=self.size)
-            z = torch.from_numpy(z).view(1,1,self.size,self.size).float().to(self.device)
+            # torch.save(torch.from_numpy(z0), os.path.join(self.save_path, "z_{}.pt".format(name)))
+            # print("z saved to: {}".format(os.path.join(self.save_path, "z_{}.pt".format(name))))
+            # with open("./runs/{}/println.txt".format(self.run_name), 'a') as f:
+            #     print("z saved to: {}".format(os.path.join(self.save_path, "z_{}.pt".format(name))), file=f)
             
-            # r1: compared to last vis
-            for out_idx in range(10):
-                out = self.model(z, self.last_z)
-                self.out1[out_idx] = out
-            # print("out1: {}, {}, {}".format(self.out1, torch.mean(self.out1), torch.var(self.out1)))
-            r1 = self.heuristic(out_mean=torch.mean(self.out1), out_var=torch.var(self.out1), mode=2, t1=0.02, t2=0.5)
-            # e.g., tensor([0.2280], device='cuda:0')
+            # get reward
+            if self.reward_func == 'human-vis':
 
-            # r2: compared to best vis
-            for out_idx in range(10):
-                out = self.model(z, self.best_z)
-                self.out2[out_idx] = out
-            # print("out2: {}, {}, {}".format(self.out2, torch.mean(self.out2), torch.var(self.out2)))
-            # print("type: {}, {}".format(type(torch.mean(self.out2)), torch.mean(self.out2).device))
-            r2 = self.heuristic(out_mean=torch.mean(self.out2), out_var=torch.var(self.out2), mode=2, t1=0.02, t2=0.5)
-            # e.g., tensor([0.2280], device='cuda:0')
+                self.model.train()
 
-            # r3: MST length
-            length = self.MST_length(z0)
-            length_reward = torch.tensor([self.coef / length]).to(self.device)
-            r3 = length_reward - self.last_length_reward
+                z = get_Ihat(normalise(z0), size=self.size)
+                z = torch.from_numpy(z).view(1,1,self.size,self.size).float().to(self.device)
 
-            # update last and best
-            self.last_length_reward = length_reward
-            self.last_z = z
-            
-            self.history_lengths = torch.hstack([self.history_lengths, length_reward])
-            
-            # if r1+r2 > self.best_reward:
-            if torch.mean(self.out2)>0.5 and torch.var(self.out2)<0.02:
-            # if r1>0 and r2>0:
-                self.best_z = z
-                self.best_z0 = z0
-                self.best_name = name
-                self.best_reward = r1+r2+r3
+                # r1: compared to last vis
+                for out_idx in range(10):
+                    out = self.model(z, self.last_z)
+                    self.out1[out_idx] = out
+                r1 = self.heuristic(out_mean=torch.mean(self.out1), out_var=torch.var(self.out1), mode=2, t1=0.02, t2=0.5)
+                # e.g., tensor([0.2280], device='cuda:0')
 
-            print("\nr1: {}, r2: {}, r3: {}\n".format(r1, r2, r3))
-            with open("./runs/{}/println.txt".format(self.run_name), 'a') as f:
-                print("\nr1: {}, r2: {}, r3: {}\n".format(r1, r2, r3), file=f)
+                # r2: compared to best vis
+                for out_idx in range(10):
+                    out = self.model(z, self.best_z)
+                    self.out2[out_idx] = out
+                r2 = self.heuristic(out_mean=torch.mean(self.out2), out_var=torch.var(self.out2), mode=2, t1=0.02, t2=0.5)
+                # e.g., tensor([0.2280], device='cuda:0')
 
-            plt.cla()
-            draw_z(
-                z=normalise(z0), 
-                cls=self.label, #np.ones((z.shape[0], 1)), 
-                s=1, 
-                save_path=os.path.join(self.save_path, name), 
-                display=False, 
-                title=name + " reward: {:.4f}+{:.4f}+{:.4f}".format(r1.item(), r2.item(), r3.item()), 
-                palette='Spectral' # None
-            )
-            print("img saved to {}".format(os.path.join(self.save_path, name)))
+                # r3: MST length
+                length = self.MST_length(z0)
+                length_reward = torch.tensor([self.coef / length]).to(self.device)
+                r3 = length_reward - self.last_length_reward
+                
+                self.history_lengths = torch.hstack([self.history_lengths, length_reward])
+
+                r = r1 + r2 + r3
+
+                # update last
+                self.last_length_reward = length_reward
+                self.last_z = z
+
+                # update best
+                if torch.mean(self.out2)>0.5 and torch.var(self.out2)<0.02:
+                # if r1>0 and r2>0:
+                    self.best_z = z
+                    self.best_z0 = z0
+                    self.best_name = name
+
+                reward_info = " reward: {:.4f}+{:.4f}+{:.4f}".format(r1.item(), r2.item(), r3.item())
+
+                # print("\nr1: {}, r2: {}, r3: {}\n".format(r1, r2, r3))
+                # with open("./runs/{}/println.txt".format(self.run_name), 'a') as f:
+                #     print("\nr1: {}, r2: {}, r3: {}\n".format(r1, r2, r3), file=f)
+
+            elif self.reward_func == 'decision-making':
+                z = normalise(z0)
+
+                agc = AgglomerativeClustering(n_clusters=None, distance_threshold=0.5)
+                agc.fit(z)
+
+                # scaffold extraction
+                points = []
+                for i in range(len(np.unique(agc.labels_))):
+                    cluster = z[agc.labels_==i]
+
+                    pca = PCA(n_components=1)
+                    pca.fit(cluster)
+
+                    components = pca.components_
+                    long_axis = components[0]
+
+                    mean_point = np.mean(cluster, axis=0)
+                    distance_matrix = squareform(pdist(cluster))
+                    major_axis_length = np.max(distance_matrix)
+                    endpoint1 = mean_point - long_axis * (major_axis_length / 2)
+                    endpoint2 = mean_point + long_axis * (major_axis_length / 2)
+
+                    points.append(endpoint1)
+                    points.append(endpoint2)
+                points = np.vstack(points)
+
+                # curve fitting
+                # 1. rotate to x-axis
+                pca = PCA(n_components=2)
+                pca.fit(points)
+                components = pca.components_
+                max_variance_direction = components[0]
+                angle = np.arctan2(max_variance_direction[1], max_variance_direction[0])
+                rotation_matrix = np.array([[np.cos(angle), -np.sin(angle)],
+                                            [np.sin(angle), np.cos(angle)]])
+                points = np.dot(points, rotation_matrix)
+                # 2. sort based on x
+                points = points[np.argsort(points[:, 0])]
+                # 3. normalise
+                points = normalise(points)
+
+                # 4. fitting
+                poly = PolynomialFeatures(degree=100, include_bias=False)
+                poly_features = poly.fit_transform(points[:, 0].reshape(-1, 1))
+
+                poly_reg = LinearRegression()
+                poly_reg.fit(poly_features, points[:, 1])
+
+                # 5. evaluation
+                x = points[:, 0].reshape(-1,1)
+                y_pred = poly_reg.predict(poly.transform(x))
+
+                mse = np.sqrt(mean_squared_error(points[:, 1], y_pred))
+
+                # r1: compared to last
+                r1 = self.last_mse - mse
+
+                # r2: compared to best
+                r2 = self.best_mse - mse
+
+                r = r1 + r2
+
+                # update last
+                self.last_mse = mse
+
+                # update best
+                if r2>0:
+                    self.best_mse = mse
+                    self.best_name = name
+
+                reward_info = " reward: {:.4f}+{:.4f}".format(r1, r2)
+                    
+            elif self.reward_func == 'human-dm':
+                pass
+
+            else:
+                print("wrong reward_func!")
+                exit()
+
+            if self.draw:
+
+                plt.cla()
+                draw_z(
+                    z=normalise(z0), 
+                    cls=self.label, #np.ones((z.shape[0], 1)), 
+                    s=1, 
+                    save_path=os.path.join(self.save_path, name), 
+                    display=False, 
+                    title=name + reward_info, 
+                    palette='Spectral' # None
+                )
+                print("img saved to {}".format(os.path.join(self.save_path, name)))
 
             # if self.inference:
             #     tree = get_tree(self.x)
@@ -389,7 +493,7 @@ class DREnv(Env):
             #     )
             #     print("img saved to {}".format(os.path.join(self.save_path, "20k_iter{}_step{}".format(self.iteration, self.step))))
 
-            return r1 + r2 + r3
+            return r
 
     def transition(self, action, partition):
         """
@@ -399,9 +503,9 @@ class DREnv(Env):
         # 1. obtain n_neighbors / MN_ratio / FP_ratio
         hp = self.combinations[action.detach().cpu() % len(self.combinations)]
         alpha, beta, gamma = hp[:, 0], hp[:, 1], hp[:, 2]       # (20,), (20,), (20,)
-        print("alpha: ", alpha)
-        print("beta: ", beta)
-        print("gamma: ", gamma)
+        # print("alpha: ", alpha)
+        # print("beta: ", beta)
+        # print("gamma: ", gamma)
         alpha = {k:alpha[k] for k in range(len(alpha))}
         alpha = [alpha[i.item()] for i in partition]
 
@@ -419,26 +523,26 @@ class DREnv(Env):
         state = self.obtain_state(self.x, self.label, n_neighbors, MN_ratio, FP_ratio, initial=False)
         
         # 3. obtain reward
-        reward = self.obtain_reward(state)
+        self.reward = torch.tensor([self.obtain_reward(state)]).to(self.device)
 
         # 4. obtain state - history
 
         self.history_actions = torch.vstack([self.history_actions, action])                                     # update history actions
 
-        self.history_rewards = torch.hstack([self.history_rewards, reward])                                     # update history rewards
+        self.history_rewards = torch.hstack([self.history_rewards, self.reward])                                     # update history rewards
 
         if sum(self.history_rewards[-min(self.step+1, self.history_len):]) > 0:                                      # add history info to state
             self.effect_history_actions = torch.tensor([1]).to(self.device)
         else:
             self.effect_history_actions = torch.tensor([0]).to(self.device)
 
-        self.diff_reward = reward - self.history_rewards[-2]
+        self.diff_reward = self.reward - self.history_rewards[-2]
 
         self.history = [self.history_actions[-min(self.step+1, self.history_len):, :], self.effect_history_actions, self.diff_reward]
 
         state["history"] = [i.to(self.device) for i in self.history]
 
-        return state, reward
+        return state, self.reward
 
     def next_step(self, action, iteration, step, partition):
         self.count = self.count + 1
@@ -486,26 +590,94 @@ class DREnv(Env):
             n_MN=np.round(self.current_state["MN_ratio"] * self.current_state["n_neighbors"]).astype(np.int32), 
             n_FP=np.round(self.current_state["FP_ratio"] * self.current_state["n_neighbors"]).astype(np.int32)
         )
-        z = get_Ihat(normalise(z0), size=self.size)
-        z = torch.from_numpy(z).view(1,1,self.size,self.size).float().to(self.device)
 
-        plt.cla()
-        draw_z(
-            z=normalise(z0), 
-            cls=self.label, #np.ones((z.shape[0], 1)), 
-            s=1, 
-            save_path=os.path.join(self.save_path, "initial"), 
-            display=False, 
-            title="initial", 
-            palette='Spectral' # None
-        )
-        print("img saved to {}".format(os.path.join(self.save_path, "initial")))
+        if self.reward_func == 'human-vis':
+            z = get_Ihat(normalise(z0), size=self.size)
+            z = torch.from_numpy(z).view(1,1,self.size,self.size).float().to(self.device)
 
-        self.last_z = z
-        self.best_z = z
-        self.best_z0 = z0
+            self.last_z = z
+            self.best_z = z
+            self.best_z0 = z0
 
-        length = self.MST_length(z0)
-        self.last_length_reward = torch.tensor([self.coef / length]).to(self.device)
+            length = self.MST_length(z0)
+            self.last_length_reward = torch.tensor([self.coef / length]).to(self.device)
+        
+        elif self.reward_func == 'decision-making':
+            z = normalise(z0)
+
+            agc = AgglomerativeClustering(n_clusters=None, distance_threshold=0.5)
+            agc.fit(z)
+
+            # scaffold extraction
+            points = []
+            for i in range(len(np.unique(agc.labels_))):
+                cluster = z[agc.labels_==i]
+
+                pca = PCA(n_components=1)
+                pca.fit(cluster)
+
+                components = pca.components_
+                long_axis = components[0]
+
+                mean_point = np.mean(cluster, axis=0)
+                distance_matrix = squareform(pdist(cluster))
+                major_axis_length = np.max(distance_matrix)
+                endpoint1 = mean_point - long_axis * (major_axis_length / 2)
+                endpoint2 = mean_point + long_axis * (major_axis_length / 2)
+
+                points.append(endpoint1)
+                points.append(endpoint2)
+            points = np.vstack(points)
+
+            # curve fitting
+            # 1. rotate to x-axis
+            pca = PCA(n_components=2)
+            pca.fit(points)
+            components = pca.components_
+            max_variance_direction = components[0]
+            angle = np.arctan2(max_variance_direction[1], max_variance_direction[0])
+            rotation_matrix = np.array([[np.cos(angle), -np.sin(angle)],
+                                        [np.sin(angle), np.cos(angle)]])
+            points = np.dot(points, rotation_matrix)
+            # 2. sort based on x
+            points = points[np.argsort(points[:, 0])]
+            # 3. normalise
+            points = normalise(points)
+
+            # 4. fitting
+            poly = PolynomialFeatures(degree=100, include_bias=False)
+            poly_features = poly.fit_transform(points[:, 0].reshape(-1, 1))
+
+            poly_reg = LinearRegression()
+            poly_reg.fit(poly_features, points[:, 1])
+
+            # 5. evaluation
+            x = points[:, 0].reshape(-1,1)
+            y_pred = poly_reg.predict(poly.transform(x))
+
+            mse = np.sqrt(mean_squared_error(points[:, 1], y_pred))
+
+            self.last_mse = mse
+            self.best_mse = mse
+
+        elif self.reward_func == 'human-dm':
+            pass
+
+        else:
+            print("wrong reward_func!")
+            exit()
+
+        if self.draw:
+            plt.cla()
+            draw_z(
+                z=normalise(z0), 
+                cls=self.label, #np.ones((z.shape[0], 1)), 
+                s=1, 
+                save_path=os.path.join(self.save_path, "initial"), 
+                display=False, 
+                title="initial", 
+                palette='Spectral' # None
+            )
+            print("img saved to {}".format(os.path.join(self.save_path, "initial")))
 
         return self.current_state
