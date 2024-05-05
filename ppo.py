@@ -74,7 +74,7 @@ class Args:
     """the number of steps to run in each environment per policy rollout"""
     anneal_lr: bool = True # False # True
     """Toggle learning rate annealing for policy and value networks"""
-    gamma: float = 0.99
+    gamma: float = 1.0 #0.99
     """the discount factor gamma"""
     gae_lambda: float = 0.95
     """the lambda for the general advantage estimation"""
@@ -266,14 +266,14 @@ class PolicyEnsemble(nn.Module):
     def __init__(self, num_models, num_node_features, hidden, num_actions, out_dim, std, history_len, num_partition, device):
         super().__init__()
         self.base_models = nn.ModuleList([])
-        for _ in range(num_models):
+        for i in range(num_models):
             base = GAT(
                 num_node_features, 
                 hidden, 
                 num_actions=num_actions, 
                 out_dim=out_dim, 
                 std=std, 
-                history_len=history_len, 
+                history_len=i+1, 
                 num_partition=num_partition, 
                 device=device
             )
@@ -281,12 +281,12 @@ class PolicyEnsemble(nn.Module):
 
     def forward(self, state, partition=None):
 
-        indices = np.random.choice(len(self.base_models), round(len(self.base_models)*0.8), replace=False)
+        # indices = np.random.choice(len(self.base_models), round(len(self.base_models)*0.8), replace=False)
 
         results = []
         for i, base_model in enumerate(self.base_models):
-            if i not in indices:
-                continue
+            # if i not in indices:
+            #     continue
             out = base_model(state, partition)                  # (num_partition, out_dim)
             results.append(out)
 

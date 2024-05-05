@@ -527,11 +527,11 @@ class DREnv(Env):
 
         # 4. obtain state - history
 
-        self.history_actions = torch.vstack([self.history_actions, action])                                     # update history actions
+        self.history_actions = torch.vstack([self.history_actions, action+1])                                       # update history actions
 
-        self.history_rewards = torch.hstack([self.history_rewards, self.reward])                                     # update history rewards
+        self.history_rewards = torch.hstack([self.history_rewards, self.reward])                                    # update history rewards
 
-        if sum(self.history_rewards[-min(self.step+1, self.history_len):]) > 0:                                      # add history info to state
+        if sum(self.history_rewards[-min(self.step+1, self.history_len):]) > 0:                                     # add history info to state
             self.effect_history_actions = torch.tensor([1]).to(self.device)
         else:
             self.effect_history_actions = torch.tensor([0]).to(self.device)
