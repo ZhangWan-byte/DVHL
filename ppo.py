@@ -182,7 +182,7 @@ class GAT(torch.nn.Module):
         self.pooling = MultiheadAttention(embed_dim=hidden, num_heads=4)
 
         # history feature
-        self.gru = nn.GRU(input_size=self.num_actions, hidden_size=hidden, num_layers=2, batch_first=True)
+        self.gru = nn.GRU(input_size=self.num_actions+1, hidden_size=hidden, num_layers=2, batch_first=True)
         self.history_mlp = nn.Sequential(
             layer_init(nn.Linear(in_features=self.hidden+2, out_features=hidden), std=std, jianhong_advice=jianhong_advice),
             nn.LeakyReLU(),
@@ -227,12 +227,18 @@ class GAT(torch.nn.Module):
         x, _ = self.pooling(x, x, x)                                                                        # (num_partition, hidden)
 
         # History features
-        history_actions, effect_history_actions, diff_reward = state["history"]
+        history_actions, history_r1, diff_reward = state["history"]
 
-        history_actions, _ = self.gru(F.one_hot(history_actions.flatten().long(), num_classes=self.num_actions).float()) # (1, hidden)
+        history_actions, _ = self.gru(F.one_hot(history_actions.flatten().long(), num_classes=self.num_actions+1).float()) # (1, hidden)
         # history_actions, _ = self.gru(history_actions)
 
         history_actions = torch.mean(history_actions, dim=0)
+
+        effect = sum(history_r1[-self.history_len:])
+        if effect > 0:
+            effect_history_actions = torch.ones([1]).to(self.device)
+        else:
+            effect_history_actions = torch.zeros([1]).to(self.device)
 
         history = torch.cat([history_actions.view(1,-1), effect_history_actions.view(1,-1), diff_reward.view(1,-1)], dim=1).float()
 
@@ -273,7 +279,7 @@ class PolicyEnsemble(nn.Module):
                 num_actions=num_actions, 
                 out_dim=out_dim, 
                 std=std, 
-                history_len=i+1, 
+                history_len=history_len-i, 
                 num_partition=num_partition, 
                 device=device
             )

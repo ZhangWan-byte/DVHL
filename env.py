@@ -154,15 +154,16 @@ class DREnv(Env):
         # record during training
         self.best_epoch_reward = 0
         self.history_rewards = torch.tensor([0.]).to(self.device)
+        self.history_r1 = torch.tensor([]).to(self.device)
 
         # history: actions / effect
         self.history_len = history_len
         self.history_actions = torch.zeros((history_len, self.num_partition)).to(self.device)
         self.diff_reward = torch.zeros([1]).to(self.device)
-        self.effect_history_actions = torch.zeros([1]).to(self.device)
+        # self.effect_history_actions = torch.zeros([1]).to(self.device)
 
         # like a sentence, abcdefg0 / fdsjkhy1, each character is one_hot
-        self.history = [self.history_actions, self.effect_history_actions, self.diff_reward]
+        self.history = [self.history_actions, self.history_r1, self.diff_reward]
         self.history_feedbacks = []
 
         self.save_path = save_path
@@ -451,6 +452,9 @@ class DREnv(Env):
                 print("wrong reward_func!")
                 exit()
 
+            # update history r1
+            self.history_r1 = torch.hstack([self.history_r1, torch.tensor(r1).to(self.device)])
+
             if self.draw:
 
                 plt.cla()
@@ -531,14 +535,14 @@ class DREnv(Env):
 
         self.history_rewards = torch.hstack([self.history_rewards, self.reward])                                    # update history rewards
 
-        if sum(self.history_rewards[-min(self.step+1, self.history_len):]) > 0:                                     # add history info to state
-            self.effect_history_actions = torch.tensor([1]).to(self.device)
-        else:
-            self.effect_history_actions = torch.tensor([0]).to(self.device)
+        # if sum(self.history_r1[-min(self.step+1, self.history_len):]) > 0:                                     # add history info to state
+        #     self.effect_history_actions = torch.tensor([1]).to(self.device)
+        # else:
+        #     self.effect_history_actions = torch.tensor([0]).to(self.device)
 
         self.diff_reward = self.reward - self.history_rewards[-2]
 
-        self.history = [self.history_actions[-min(self.step+1, self.history_len):, :], self.effect_history_actions, self.diff_reward]
+        self.history = [self.history_actions[-min(self.step+1, self.history_len):, :], self.history_r1, self.diff_reward]
 
         state["history"] = [i.to(self.device) for i in self.history]
 
@@ -559,7 +563,7 @@ class DREnv(Env):
         else:
             info = {
                 "episode": {
-                    "r":sum(self.history_rewards[-(self.step+1):]).item(), 
+                    "r":sum(self.history_r1[-(self.step+1):]).item(), 
                     "l": self.count
                 }
             }
