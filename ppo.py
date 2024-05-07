@@ -66,7 +66,7 @@ class Args:
     """the id of the environment"""
     total_timesteps: int = 3200 # 500000
     """total timesteps of the experiments"""
-    learning_rate: float = 2.5e-4
+    learning_rate: float = 3e-5 #2.5e-4
     """the learning rate of the optimizer"""
     num_envs: int = 1 # 4
     """the number of parallel game environments"""
@@ -80,7 +80,7 @@ class Args:
     """the lambda for the general advantage estimation"""
     num_minibatches: int = 8
     """the number of mini-batches"""
-    update_epochs: int = 4
+    update_epochs: int = 8 #10 #4
     """the K epochs to update the policy"""
     norm_adv: bool = True
     """Toggles advantages normalization"""
@@ -109,7 +109,9 @@ class Args:
 
     # draw
     draw: bool = True
-    """whether to draw z-imgs for each step"""
+    """whether to draw z-imgs and save z for each step"""
+    verbose: bool = False
+    """whether to print prompt info"""
 
     # to be filled in runtime
     batch_size: int = 0
@@ -584,7 +586,8 @@ def main():
         run_name=run_name, 
         device=device, 
         reward_func=args.reward_func, 
-        draw=args.draw
+        draw=args.draw, 
+        verbose=args.verbose
     )
 
     agent = Agent(
@@ -741,6 +744,10 @@ def main():
         if args.jianhong_advice==True:
             rewards = (rewards - rewards.mean(dim=0)) / (rewards.std(dim=0) + 1e-8)
 
+        # save agent with BEST single mse
+        if torch.min(envs.history_mse[-actual_num_steps:]) < envs.best_mse:
+            torch.save(agent.state_dict(), "./runs/{}/best_mse_agent.pt".format(run_name))
+
         # bootstrap value if not done
         with torch.no_grad():
             next_values = agent.get_value(next_obs, partition).reshape(1, -1)           # (1, num_partition)
@@ -891,6 +898,7 @@ def main():
         writer.add_scalar("losses/clipfrac", np.mean(clipfracs), global_step)
         writer.add_scalar("losses/explained_variance", explained_var, global_step)
         writer.add_scalar("losses/rewards", envs.history_rewards[-actual_num_steps:].mean().item(), global_step)
+        writer.add_scalar("losses/mse", min(np.array(envs.history_mse)[-actual_batch_size:]), global_step)
 
         now_time = time.time()
         # print("SPS:", int(global_step / (now_time - start_time)))
@@ -898,13 +906,16 @@ def main():
         #     print("SPS:", int(global_step / (now_time - start_time)), file=f)
         writer.add_scalar("charts/SPS", int(global_step / (now_time- start_time)), global_step)
 
+        # save agent with BEST episodic accumulative reward
         if torch.sum(envs.history_rewards[-actual_num_steps:]) >= envs.best_epoch_reward:
             torch.save(agent.state_dict(), "./runs/{}/best_epoch_agent.pt".format(run_name))
             envs.best_epoch_reward = torch.sum(envs.history_rewards[-actual_num_steps:])
+
         torch.save(agent.state_dict(), "./runs/{}/agent.pt".format(run_name))
         torch.save(envs.history_rewards.detach().cpu(), "./runs/{}/history_rewards.pt".format(run_name))
         torch.save(envs.history_actions.detach().cpu(), "./runs/{}/history_actions.pt".format(run_name))
-    
+        np.save("./runs/{}/history_mse.npy".format(run_name), np.array(envs.history_mse))
+
         if args.cuda:
             torch.cuda.empty_cache()
         gc.collect()

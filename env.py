@@ -67,11 +67,12 @@ class SiameseNet(nn.Module):
 
 
 class DREnv(Env):
-    def __init__(self, x, label, model_path="./exp1/model_online.pt", action_space=27, history_len=7, save_path=None, num_steps=32, num_partition=20, size=256, run_name=None, inference=False, data=None, labels=None, idx=None, r3_coef=3, device=torch.device('cpu'), reward_func='decision-making', draw=True):
+    def __init__(self, x, label, model_path="./exp1/model_online.pt", action_space=27, history_len=7, save_path=None, num_steps=32, num_partition=20, size=256, run_name=None, inference=False, data=None, labels=None, idx=None, r3_coef=3, device=torch.device('cpu'), reward_func='decision-making', draw=True, verbose=False):
         self.x = x
         self.label = label
 
         self.draw = draw
+        self.verbose = verbose
 
         self.name = None
         self.best_name = None
@@ -123,6 +124,8 @@ class DREnv(Env):
         elif reward_func == 'decision-making':
             self.best_mse = np.inf
             self.last_mse = np.inf
+
+            self.history_mse = []
 
         elif reward_func == 'human-dm':
             pass
@@ -315,14 +318,16 @@ class DREnv(Env):
             )
             t2 = time.time()
 
-            # print("time used for fit-transform: {} s".format(t2-t1))
-            # with open("./runs/{}/println.txt".format(self.run_name), 'a') as f:
-            #     print("time used for fit-transform: {} s".format(t2-t1), file=f)
+            if self.verbose:
+                print("time used for fit-transform: {} s".format(t2-t1))
+                with open("./runs/{}/println.txt".format(self.run_name), 'a') as f:
+                    print("time used for fit-transform: {} s".format(t2-t1), file=f)
 
-            # torch.save(torch.from_numpy(z0), os.path.join(self.save_path, "z_{}.pt".format(name)))
-            # print("z saved to: {}".format(os.path.join(self.save_path, "z_{}.pt".format(name))))
-            # with open("./runs/{}/println.txt".format(self.run_name), 'a') as f:
-            #     print("z saved to: {}".format(os.path.join(self.save_path, "z_{}.pt".format(name))), file=f)
+            if self.draw:
+                torch.save(torch.from_numpy(z0), os.path.join(self.save_path, "z_{}.pt".format(name)))
+                print("z saved to: {}".format(os.path.join(self.save_path, "z_{}.pt".format(name))))
+                with open("./runs/{}/println.txt".format(self.run_name), 'a') as f:
+                    print("z saved to: {}".format(os.path.join(self.save_path, "z_{}.pt".format(name))), file=f)
             
             # get reward
             if self.reward_func == 'human-vis':
@@ -401,14 +406,6 @@ class DREnv(Env):
 
                 # curve fitting
                 # 1. rotate to x-axis
-                pca = PCA(n_components=2)
-                pca.fit(points)
-                components = pca.components_
-                max_variance_direction = components[0]
-                angle = np.arctan2(max_variance_direction[1], max_variance_direction[0])
-                rotation_matrix = np.array([[np.cos(angle), -np.sin(angle)],
-                                            [np.sin(angle), np.cos(angle)]])
-                points = np.dot(points, rotation_matrix)
                 # 2. sort based on x
                 points = points[np.argsort(points[:, 0])]
                 # 3. normalise
@@ -425,7 +422,9 @@ class DREnv(Env):
                 x = points[:, 0].reshape(-1,1)
                 y_pred = poly_reg.predict(poly.transform(x))
 
-                mse = np.sqrt(mean_squared_error(points[:, 1], y_pred))
+                mse = mean_squared_error(points[:, 1], y_pred)
+
+                self.history_mse.append(mse)
 
                 # r1: compared to last
                 r1 = self.last_mse - mse
@@ -433,7 +432,8 @@ class DREnv(Env):
                 # r2: compared to best
                 r2 = self.best_mse - mse
 
-                r = r1 + r2
+                # r = r1 + r2
+                r = r1
 
                 # update last
                 self.last_mse = mse
@@ -443,7 +443,8 @@ class DREnv(Env):
                     self.best_mse = mse
                     self.best_name = name
 
-                reward_info = " reward: {:.4f}+{:.4f}".format(r1, r2)
+                # reward_info = " reward: {:.4f}+{:.4f}".format(r1, r2)
+                reward_info = " reward: {:.4f}".format(r1)
                     
             elif self.reward_func == 'human-dm':
                 pass
@@ -635,14 +636,6 @@ class DREnv(Env):
 
             # curve fitting
             # 1. rotate to x-axis
-            pca = PCA(n_components=2)
-            pca.fit(points)
-            components = pca.components_
-            max_variance_direction = components[0]
-            angle = np.arctan2(max_variance_direction[1], max_variance_direction[0])
-            rotation_matrix = np.array([[np.cos(angle), -np.sin(angle)],
-                                        [np.sin(angle), np.cos(angle)]])
-            points = np.dot(points, rotation_matrix)
             # 2. sort based on x
             points = points[np.argsort(points[:, 0])]
             # 3. normalise
@@ -659,7 +652,7 @@ class DREnv(Env):
             x = points[:, 0].reshape(-1,1)
             y_pred = poly_reg.predict(poly.transform(x))
 
-            mse = np.sqrt(mean_squared_error(points[:, 1], y_pred))
+            mse = mean_squared_error(points[:, 1], y_pred)
 
             self.last_mse = mse
             self.best_mse = mse
