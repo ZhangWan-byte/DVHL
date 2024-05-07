@@ -745,7 +745,7 @@ def main():
             rewards = (rewards - rewards.mean(dim=0)) / (rewards.std(dim=0) + 1e-8)
 
         # save agent with BEST single mse
-        if torch.min(envs.history_mse[-actual_num_steps:]) < envs.best_mse:
+        if min(envs.history_mse[-actual_num_steps:]) < envs.best_mse:
             torch.save(agent.state_dict(), "./runs/{}/best_mse_agent.pt".format(run_name))
 
         # bootstrap value if not done
