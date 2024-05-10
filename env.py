@@ -155,6 +155,8 @@ class DREnv(Env):
             self.best_feats = np.ones((1, 14))
             self.last_feats = np.ones((1, 14))
 
+            self.best_reward = 0.0
+
         else:
             pass
 
@@ -480,12 +482,12 @@ class DREnv(Env):
 
                 features = generate_features(z=z, labels=agc.labels_, data=self.x).reshape(1,-1)
 
-                feat1 = np.hstack([self.last_feats, features]).reshape(1,-1)
-                feat2 = np.hstack([self.best_feats, features]).reshape(1,-1)
+                feat1 = np.hstack([features, self.last_feats]).reshape(1,-1)
+                feat2 = np.hstack([features, self.best_feats]).reshape(1,-1)
                 
-                r1 = self.lgb.predict(feat1.reshape(1,-1)).item()
+                r1 = self.lgb.predict_proba(feat1.reshape(1,-1)).max()
 
-                r2 = self.lgb.predict(feat1.reshape(1,-1)).item()
+                r2 = self.lgb.predict_proba(feat2.reshape(1,-1)).max()
 
                 r = r1 + r2
 

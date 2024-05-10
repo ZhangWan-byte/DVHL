@@ -757,9 +757,9 @@ def main():
                 envs.best_mse = min(envs.history_mse[-actual_num_steps:])
         elif args.reward_func == 'human-dm':
             # save agent with BEST episodic accumulative rewards
-            if min(envs.history_rewards[-actual_num_steps:]) < envs.best_mse:
+            if min(envs.history_rewards[-actual_num_steps:]) < envs.best_reward:
                 torch.save(agent.state_dict(), "./runs/{}/best_rewards_agent.pt".format(run_name))
-                envs.best_mse = min(envs.history_rewards[-actual_num_steps:])
+                envs.best_reward = sum(envs.history_rewards[-actual_num_steps:])
 
         # bootstrap value if not done
         with torch.no_grad():
