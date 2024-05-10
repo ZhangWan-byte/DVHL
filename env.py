@@ -485,17 +485,21 @@ class DREnv(Env):
                 feat1 = np.hstack([features, self.last_feats]).reshape(1,-1)
                 feat2 = np.hstack([features, self.best_feats]).reshape(1,-1)
                 
-                out1 = [tree.predict_proba(feat1)[0][1] for tree in self.rf.estimators_]
-                # for tree in self.rf.estimators_:
-                #     pred = tree.predict_proba(feat1)
-                #     out1.append(pred[0][1])
-                r1 = max(np.mean(out1) - np.std(out1), 0)
+                # out1 = [tree.predict_proba(feat1)[0][1] for tree in self.rf.estimators_]
+                # # for tree in self.rf.estimators_:
+                # #     pred = tree.predict_proba(feat1)
+                # #     out1.append(pred[0][1])
+                # r1 = np.mean(out1) # max(np.mean(out1) - np.std(out1), 0)
 
-                out2 = [tree.predict_proba(feat2)[0][1] for tree in self.rf.estimators_]
-                # for tree in self.rf.estimators_:
-                #     pred = tree.predict_proba(feat2)
-                #     out2.append(pred[0][1])
-                r2 = max(np.mean(out2) - np.std(out2), 0)
+                # out2 = [tree.predict_proba(feat2)[0][1] for tree in self.rf.estimators_]
+                # # for tree in self.rf.estimators_:
+                # #     pred = tree.predict_proba(feat2)
+                # #     out2.append(pred[0][1])
+                # r2 = np.mean(out2) # max(np.mean(out2) - np.std(out2), 0)
+
+                r1 = self.rf.predict_proba(feat1)[0][1]
+
+                r2 = self.rf.predict_proba(feat2)[0][1]
 
                 r = r1 + r2
 
