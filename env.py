@@ -485,9 +485,17 @@ class DREnv(Env):
                 feat1 = np.hstack([features, self.last_feats]).reshape(1,-1)
                 feat2 = np.hstack([features, self.best_feats]).reshape(1,-1)
                 
-                r1 = self.lgb.predict_proba(feat1.reshape(1,-1)).max()
+                out1 = [tree.predict_proba(feat1)[0][1] for tree in self.rf.estimators_]
+                # for tree in self.rf.estimators_:
+                #     pred = tree.predict_proba(feat1)
+                #     out1.append(pred[0][1])
+                r1 = max(np.mean(out1) - np.std(out1), 0)
 
-                r2 = self.lgb.predict_proba(feat2.reshape(1,-1)).max()
+                out2 = [tree.predict_proba(feat2)[0][1] for tree in self.rf.estimators_]
+                # for tree in self.rf.estimators_:
+                #     pred = tree.predict_proba(feat2)
+                #     out2.append(pred[0][1])
+                r2 = max(np.mean(out2) - np.std(out2), 0)
 
                 r = r1 + r2
 
@@ -723,7 +731,7 @@ class DREnv(Env):
             self.best_feats = np.ones((1,14))
             self.last_feats = np.ones((1,14))
 
-            self.lgb = pickle.load(open("./lgb.pkl", "rb"))
+            self.rf = pickle.load(open("./rf.pkl", "rb"))
 
         else:
             print("wrong reward_func!")
