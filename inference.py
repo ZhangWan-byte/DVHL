@@ -20,7 +20,7 @@ class Args:
     run_name: str = ""
     """resume previous checkpoint"""
 
-    exp_name: str = os.path.basename(__file__)[: -len(".py")]
+    exp_name: str = "ppo" # os.path.basename(__file__)[:-len(".py")]
     """the name of this experiment"""
     seed: int = 3407
     """seed of the experiment"""
@@ -34,18 +34,28 @@ class Args:
     # Algorithm specific
     env_id: str = "DVHL"
     """the id of the environment"""
-    num_steps: int = 64 #100
+    num_steps: int = 32 #100
     """number of rollout steps"""
     num_policy: int = 6
     """number of policies"""
-    learning_rate: float = 2.5e-4
+    learning_rate: float = 3e-5
     """the learning rate of the optimizer"""
-    search: str = "sampling" # random / greedy / sampling / beam / eas-lay
+    search: str = "sampling" # random / epsilon-greedy / sampling / adaptive / eas-lay
     """types of search algorithm"""
+
+    # reward func
+    reward_func: str = 'decision-making'
+    """decision-making / human-vis / human-dm"""
+
+    # draw
+    draw: bool = True
+    """whether to draw z-imgs and save z for each step"""
+    verbose: bool = False
+    """whether to print prompt info"""
 
 
 class InferenceAgent(nn.Module):
-    def __init__(self, envs, num_policy=6, num_node_features=50, hidden=64, history_len=7, num_actions=27, num_partition=None, device=torch.device('cuda' if torch.cuda.is_available() else 'cpu'), actor_path=None):
+    def __init__(self, envs, num_policy=6, num_node_features=50, hidden=32, history_len=7, num_actions=27, num_partition=None, device=torch.device('cuda' if torch.cuda.is_available() else 'cpu'), actor_path=None, forward_times=10):
         super().__init__()
 
         self.actor = PolicyEnsemble(
@@ -56,40 +66,97 @@ class InferenceAgent(nn.Module):
             out_dim=num_actions, 
             std=0.01, 
             history_len=history_len, 
-            num_partition=num_partition
+            num_partition=num_partition, 
+            device=device
         )
-
         if actor_path is not None:
             self.actor.load_state_dict(torch.load(actor_path))
+        self.actor.train()
 
         self.device = device
 
         self.num_actions = num_actions
 
+        self.forward_times = forward_times
+
+        self.use_MCDropout = False
+
+        self.epsilon = 0.05
+
     def search(self, state, partition, search_type):
-        logits = self.actor(state, partition)
 
-        if search_type=='random':
-            action = torch.tensor(np.random.choice(np.arange(self.num_actions), size=20)).view(-1).to(self.device)
+        # 1. obtain logits
+        if search_type=="adaptive":
+            means = []
+            stds = []
+            for base in self.actor.base_models:
+                logits_i = []
+                for _ in range(self.forward_times):
+                    logit = base(state, partition)
+                    logits_i.append(logit)
+                logits_i = torch.stack(logits_i, dim=0)     # (forward_times, num_partition, num_action)
+
+                mean = torch.mean(logits_i, dim=0)          # (num_partition, num_action)
+                std = torch.std(logits_i)                   # float
             
-        elif search_type=='sampling':
-            probs = Categorical(logits=logits)
-            action = probs.sample()
-        
-        elif search_type=='greedy':
-            action = torch.argmax(logits, dim=1)
+                means.append(mean)
+                stds.append(std)
+            means = torch.stack(means, dim=0)               # (num_base, num_partition, num_action)
+            stds = torch.tensor(stds)
 
-        elif search_type=='beam':
-            pass
+            logits = means[torch.argmin(stds)]              # (num_partition, num_action)
+        else:
+            logits = []
+            for base in self.actor.base_models:
+                logit = base(state, partition)
+            logits = torch.stack(logits, dim=0)             # (num_base, num_partition, num_action)
+
+        # 2. obtain action
+        if search_type=='random':
+            actions = []
+            for _ in range(len(self.actor.base_models)):
+                action = torch.tensor(np.random.choice(np.arange(self.num_actions), size=20))
+                actions.append(action)
+            actions = torch.stack(actions, dim=0)           # (num_base, num_partition)
+            
+        elif search_type=='epsilon-greedy':
+            actions = []
+            for i in range(len(self.actor.base_models)):
+                rnd = torch.randn(1)
+                if rnd<self.epsilon:
+                    action = torch.tensor(np.random.choice(np.arange(self.num_actions), size=20))
+                else:
+                    action = torch.argmax(logits[i], dim=1)
+                actions.append(action)
+            actions = torch.stack(actions, dim=0)           # (num_base, num_partition)
+
+        elif search_type=='sampling':
+            actions = []
+            for i in range(len(self.actor.base_models)):
+                probs = Categorical(logits=logits[i])
+                action = probs.sample()
+                actions.append(action)
+            actions = torch.stack(actions, dim=0)           # (num_base, num_partition)
+
+        elif search_type=='adaptive':
+            rnd = torch.randn(1)
+            if rnd<self.epsilon:
+                action = torch.tensor(np.random.choice(np.arange(self.num_actions), size=20))
+            else:
+                action = torch.argmax(logits, dim=1)        # (num_partition)
 
         elif search_type=='eas-lay':
             pass
+
+        # should be 2 dims: 
+        # 1) whether include human feedback
+        # 2) how to generate actions from policy (random/greedy/sampling)
 
         else:
             print("not implemented search algorithm!")
             exit()
         
-        return action
+        return action.cuda()
 
 
 def main():
@@ -109,6 +176,7 @@ def main():
     torch.backends.cudnn.deterministic = False
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
+    print(device)
 
     # data generation
 
@@ -120,13 +188,11 @@ def main():
         stepsize=6,
         random_state=None,
     )
-    idx = np.random.choice(data.shape[0], 10000, replace=False)
-    data_1k, labels_1k = data[idx], labels[idx]
+    idx = np.random.choice(data.shape[0], 1000, replace=False)
+    data, labels = data[idx], labels[idx]
 
     num_partition = len(np.unique(labels))
     partition = get_partition(data, k=num_partition, labels=None).to(device)           # (data.shape[0], ) -- each entry is a cluster
-    partition_1k = get_partition(data_1k, k=num_partition, labels=None).to(device)
-    print("partition: {}, partition_1k: {}".format(partition.shape, partition_1k.shape))
 
     # 2. MNIST
     # transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))])
@@ -139,32 +205,32 @@ def main():
     # data, labels = data[idx], labels[idx]
 
     envs = DREnv(
-        data_1k.astype('float32'), 
-        labels_1k.astype('float32'), 
-        model_path="./exp1/model_dropout.pt",  
+        data.astype('float32'), 
+        labels.astype('float32'), 
+        model_path="./exp1/model_online.pt",  
         action_space=27, 
         history_len=7, 
         save_path=f"./runs/{run_name}", 
         num_steps = args.num_steps, 
         num_partition=num_partition, 
         run_name=run_name, 
-        inference=True, 
-        data=data, 
-        labels=labels, 
-        idx=idx
+        device=device, 
+        reward_func=args.reward_func, 
+        draw=args.draw, 
+        verbose=args.verbose
     )
-    print("data_1k: {}, labels_1k: {}".format(data_1k.shape, labels_1k.shape))
 
     agent = InferenceAgent(
         envs, 
-        num_policy=args.num_policy, 
-        num_node_features=data_1k.shape[1], 
+        num_policy=6, 
+        num_node_features=50, 
         hidden=32, 
         history_len=7, 
         num_actions=27, 
         num_partition=num_partition, 
         device=device, 
-        actor_path=args.actor_path
+        actor_path=args.actor_path, 
+        forward_times=10
     ).to(device)
 
     # optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
@@ -179,45 +245,20 @@ def main():
         
         with torch.no_grad():
 
-            # handle accident or illegal situation
-            while True:
-                action = agent.search(next_obs, partition=partition_1k, search_type=args.search)
-                print("\n\n\nstep-{}: {}".format(i, action.detach().cpu()))
-                hp = envs.combinations[action.cpu() % len(envs.combinations)]
-                alpha, beta, gamma = hp[:, 0], hp[:, 1], hp[:, 2]
+            action = agent.search(next_obs, partition=partition, search_type=args.search)
 
-                alpha = {k:alpha[k] for k in range(len(alpha))}
-                alpha = [alpha[i.item()] for i in partition_1k]
-
-                beta = {k:beta[k] for k in range(len(beta))}
-                beta = [beta[i.item()] for i in partition_1k]
-
-                gamma = {k:gamma[k] for k in range(len(gamma))}
-                gamma = [gamma[i.item()] for i in partition_1k]
-
-                n_neighbors = np.round(alpha * envs.current_state["n_neighbors"]).astype(np.int32)
-                MN_ratio = beta * envs.current_state["MN_ratio"]
-                FP_ratio = gamma * envs.current_state["FP_ratio"]
-
-                if np.min(n_neighbors) < 1 or np.min(MN_ratio*n_neighbors) < 1 or np.min(FP_ratio*n_neighbors) < 1:
-                    continue         
-                else:
-                    break
-
-                t2 = time.time()
-                if (t2-t1)>600:
-                    break
-        
-        if (t2-t1)>600:
-            break
+            print("\n\n\nstep-{}: {}".format(i, action))
 
         torch.cuda.empty_cache()
         gc.collect()
 
-        actions.append(action.detach().cpu())
+        actions.append(action)
+
+        # # next step
+        # new_state, reward = transition(action, partition)
 
         # TRY NOT TO MODIFY: execute the game and log data.
-        next_obs, reward, terminations, truncations, infos = envs.next_step(action.detach().cpu(), 1, i, partition_1k)
+        next_obs, reward, terminations, truncations, infos = envs.next_step(action, 1, i, partition)
 
         rewards.append(reward)
 

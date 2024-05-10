@@ -11,6 +11,7 @@
 *.png
 /runs
 *.pkl
+!/lgb.pkl
 *.txt
 *.yml
 *.zip

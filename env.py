@@ -14,6 +14,8 @@ from myPaCMAP import *
 import itertools
 import time
 
+import pickle
+
 import networkx as nx
 from scipy.spatial.distance import pdist, squareform
 
@@ -23,6 +25,8 @@ from sklearn.linear_model import LinearRegression
 from sklearn.decomposition import PCA
 from sklearn.cluster import AgglomerativeClustering
 from sklearn.metrics import mean_squared_error
+
+from compute_feature import generate_features
 
 # from memory_profiler import profile
 
@@ -34,6 +38,26 @@ def get_tree(data):
     tree.build(20)
 
     return tree
+
+
+def generate_points_on_segment(A, B, num_points):
+    # Extract coordinates of points A and B
+    x1, y1 = A
+    x2, y2 = B
+    
+    # Calculate the increment for each coordinate
+    delta_x = (x2 - x1) / (num_points + 1)
+    delta_y = (y2 - y1) / (num_points + 1)
+    
+    # Generate points on the segment
+    points = []
+    for i in range(1, num_points + 1):
+        x = x1 + i * delta_x
+        y = y1 + i * delta_y
+        points.append((x, y))
+    
+    return points
+
 
 # human surrogate
 class SiameseNet(nn.Module):
@@ -128,7 +152,8 @@ class DREnv(Env):
             self.history_mse = []
 
         elif reward_func == 'human-dm':
-            pass
+            self.best_feats = np.ones((1, 14))
+            self.last_feats = np.ones((1, 14))
 
         else:
             pass
@@ -155,7 +180,7 @@ class DREnv(Env):
         self.last_z = None
 
         # record during training
-        self.best_epoch_reward = 0
+        self.best_epoch_reward = -1000000
         self.history_rewards = torch.tensor([0.]).to(self.device)
         self.history_r1 = torch.tensor([]).to(self.device)
 
@@ -402,6 +427,7 @@ class DREnv(Env):
 
                     points.append(endpoint1)
                     points.append(endpoint2)
+                    points.extend(generate_points_on_segment(endpoint1, endpoint2, num_points=4))
                 points = np.vstack(points)
 
                 # curve fitting
@@ -447,7 +473,32 @@ class DREnv(Env):
                 reward_info = " reward: {:.4f}".format(r1)
                     
             elif self.reward_func == 'human-dm':
-                pass
+                z = normalise(z0)
+
+                agc = AgglomerativeClustering(n_clusters=None, distance_threshold=0.5)
+                agc.fit(z)
+
+                features = generate_features(z=z, labels=agc.labels_, data=self.x).reshape(1,-1)
+
+                feat1 = np.hstack([self.last_feats, features]).reshape(1,-1)
+                feat2 = np.hstack([self.best_feats, features]).reshape(1,-1)
+                
+                r1 = self.lgb.predict(feat1.reshape(1,-1)).item()
+
+                r2 = self.lgb.predict(feat1.reshape(1,-1)).item()
+
+                r = r1 + r2
+
+                # update last
+                self.last_feats = features
+
+                # update best
+                if r2>0:
+                    self.best_feats = features
+                    self.best_name = name
+
+                reward_info = " reward: {:.4f}+{:.4f}".format(r1, r2)
+                
 
             else:
                 print("wrong reward_func!")
@@ -632,6 +683,7 @@ class DREnv(Env):
 
                 points.append(endpoint1)
                 points.append(endpoint2)
+                points.extend(generate_points_on_segment(endpoint1, endpoint2, num_points=8))
             points = np.vstack(points)
 
             # curve fitting
@@ -658,7 +710,18 @@ class DREnv(Env):
             self.best_mse = mse
 
         elif self.reward_func == 'human-dm':
-            pass
+
+            z = normalise(z0)
+
+            agc = AgglomerativeClustering(n_clusters=None, distance_threshold=0.5)
+            agc.fit(z)
+
+            features = generate_features(z=z, labels=agc.labels_, data=self.x)
+
+            self.best_feats = np.ones((1,14))
+            self.last_feats = np.ones((1,14))
+
+            self.lgb = pickle.load(open("./lgb.pkl", "rb"))
 
         else:
             print("wrong reward_func!")

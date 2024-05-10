@@ -80,7 +80,7 @@ class Args:
     """the lambda for the general advantage estimation"""
     num_minibatches: int = 8
     """the number of mini-batches"""
-    update_epochs: int = 8 #10 #4
+    update_epochs: int = 10 #4
     """the K epochs to update the policy"""
     norm_adv: bool = True
     """Toggles advantages normalization"""
@@ -104,7 +104,7 @@ class Args:
     """the number of processes for CPU parallel training"""
 
     # reward func
-    reward_func: str = 'decision-making'
+    reward_func: str = 'human-dm' #'decision-making'
     """decision-making / human-vis / human-dm"""
 
     # draw
@@ -557,6 +557,8 @@ def main():
     )
     idx = np.random.choice(data.shape[0], 1000, replace=False)
     data, labels = data[idx], labels[idx]
+    np.save("./runs/{}/data_online_1k.npy".format(run_name), data)
+    np.save("./runs/{}/labels_online_1k.npy".format(run_name), labels)
 
     num_partition = len(np.unique(labels))
     partition = get_partition(data, k=num_partition, labels=None).to(device)           # (data.shape[0], ) -- each entry is a cluster
@@ -714,7 +716,7 @@ def main():
                 if "episode" in infos.keys():
                     print(f"global_step={global_step}, episodic_return={infos['episode']['r']}")
                     writer.add_scalar("charts/episodic_return", infos["episode"]["r"], global_step)
-                    writer.add_scalar("charts/episodic_length", infos["episode"]["l"], global_step)      
+                    writer.add_scalar("charts/episodic_length", infos["episode"]["l"], global_step)
 
         if args.cuda:
             torch.cuda.empty_cache()
@@ -731,6 +733,10 @@ def main():
 
             actual_num_steps = step
             actual_batch_size = step
+
+            writer.add_scalar("charts/episodic_return", sum(envs.history_r1[-(envs.step+1):]).item(), global_step)
+            writer.add_scalar("charts/episodic_length", envs.count, global_step)
+
         else:
             actions = actions_0
             logprobs = logprobs_0
@@ -744,9 +750,16 @@ def main():
         if args.jianhong_advice==True:
             rewards = (rewards - rewards.mean(dim=0)) / (rewards.std(dim=0) + 1e-8)
 
-        # save agent with BEST single mse
-        if min(envs.history_mse[-actual_num_steps:]) < envs.best_mse:
-            torch.save(agent.state_dict(), "./runs/{}/best_mse_agent.pt".format(run_name))
+        if args.reward_func == 'decision-making':
+            # save agent with BEST single mse
+            if min(envs.history_mse[-actual_num_steps:]) < envs.best_mse:
+                torch.save(agent.state_dict(), "./runs/{}/best_mse_agent.pt".format(run_name))
+                envs.best_mse = min(envs.history_mse[-actual_num_steps:])
+        elif args.reward_func == 'human-dm':
+            # save agent with BEST episodic accumulative rewards
+            if min(envs.history_rewards[-actual_num_steps:]) < envs.best_mse:
+                torch.save(agent.state_dict(), "./runs/{}/best_rewards_agent.pt".format(run_name))
+                envs.best_mse = min(envs.history_rewards[-actual_num_steps:])
 
         # bootstrap value if not done
         with torch.no_grad():
@@ -898,7 +911,8 @@ def main():
         writer.add_scalar("losses/clipfrac", np.mean(clipfracs), global_step)
         writer.add_scalar("losses/explained_variance", explained_var, global_step)
         writer.add_scalar("losses/rewards", envs.history_rewards[-actual_num_steps:].mean().item(), global_step)
-        writer.add_scalar("losses/mse", min(np.array(envs.history_mse)[-actual_batch_size:]), global_step)
+        if args.reward_func == 'decision-making':
+            writer.add_scalar("losses/mse", min(np.array(envs.history_mse)[-actual_batch_size:]), global_step)
 
         now_time = time.time()
         # print("SPS:", int(global_step / (now_time - start_time)))
@@ -914,7 +928,8 @@ def main():
         torch.save(agent.state_dict(), "./runs/{}/agent.pt".format(run_name))
         torch.save(envs.history_rewards.detach().cpu(), "./runs/{}/history_rewards.pt".format(run_name))
         torch.save(envs.history_actions.detach().cpu(), "./runs/{}/history_actions.pt".format(run_name))
-        np.save("./runs/{}/history_mse.npy".format(run_name), np.array(envs.history_mse))
+        if args.reward_func == 'decision-making':
+            np.save("./runs/{}/history_mse.npy".format(run_name), np.array(envs.history_mse))
 
         if args.cuda:
             torch.cuda.empty_cache()

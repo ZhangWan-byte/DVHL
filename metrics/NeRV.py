@@ -15,11 +15,11 @@ def Hbeta(D, beta = 1.0):
 	"""Compute the perplexity and the P-row for a specific value of the precision of a Gaussian distribution."""
 	
 	# Compute P-row and corresponding perplexity
-	P = np.exp(-D.copy() * beta);
-	sumP = sum(P);
-	H = np.log(sumP) + beta * np.sum(D * P) / sumP;
-	P = P / sumP;
-	return H, P;
+	P = np.exp(-D.copy() * beta)
+	sumP = sum(P)
+	H = np.log(sumP) + beta * np.sum(D * P) / sumP
+	P = P / sumP
+	return H, P
 
 # This function is from Laurens van der Maaten (https://lvdmaaten.github.io/tsne/)
 # Compute the value of sigma for a given perplexity
@@ -35,42 +35,42 @@ def x2p(D, tol = 1e-5, perplexity = 30.0):
 
 	n = len(D)
 
-	P = np.zeros((n, n));
-	beta = np.ones((n, 1));
-	logU = np.log(perplexity);
+	P = np.zeros((n, n))
+	beta = np.ones((n, 1))
+	logU = np.log(perplexity)
     
 	# Loop over all datapoints
 	for i in range(n):
 	
 		# Compute the Gaussian kernel and entropy for the current precision
-		betamin = -np.inf; 
-		betamax =  np.inf;
-		Di = D[i, np.concatenate((np.r_[0:i], np.r_[i+1:n]))];
-		(H, thisP) = Hbeta(Di, beta[i]);
+		betamin = -np.inf
+		betamax =  np.inf
+		Di = D[i, np.concatenate((np.r_[0:i], np.r_[i+1:n]))]
+		(H, thisP) = Hbeta(Di, beta[i])
 			
 		# Evaluate whether the perplexity is within tolerance
-		Hdiff = H - logU;
-		tries = 0;
+		Hdiff = H - logU
+		tries = 0
 		while np.abs(Hdiff) > tol and tries < 50:
 				
 			# If not, increase or decrease precision
 			if Hdiff > 0:
-				betamin = beta[i];
+				betamin = beta[i]
 				if betamax == np.inf or betamax == -np.inf:
-					beta[i] = beta[i] * 2;
+					beta[i] = beta[i] * 2
 				else:
-					beta[i] = (beta[i] + betamax) / 2;
+					beta[i] = (beta[i] + betamax) / 2
 			else:
-				betamax = beta[i];
+				betamax = beta[i]
 				if betamin == np.inf or betamin == -np.inf:
-					beta[i] = beta[i] / 2;
+					beta[i] = beta[i] / 2
 				else:
-					beta[i] = (beta[i] + betamin) / 2;
+					beta[i] = (beta[i] + betamin) / 2
 			
 			# Recompute the values
-			(H, thisP) = Hbeta(Di, beta[i]);
-			Hdiff = H - logU;
-			tries = tries + 1;
+			(H, thisP) = Hbeta(Di, beta[i])
+			Hdiff = H - logU
+			tries = tries + 1
 			
 	# print("Mean value of sigma: ", np.mean(np.sqrt(1 / beta)))
 	return np.sqrt(1 / beta)
