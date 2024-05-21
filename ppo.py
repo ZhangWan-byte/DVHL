@@ -61,6 +61,10 @@ class Args:
     capture_video: bool = False
     """whether to capture videos of the agent performances (check out `videos` folder)"""
 
+    # Dataset
+    dataset: str = "sc-trans"
+    """simulation / sc-trans"""
+
     # Algorithm specific arguments
     env_id: str = "DVHL" # "CartPole-v1"
     """the id of the environment"""
@@ -80,7 +84,7 @@ class Args:
     """the lambda for the general advantage estimation"""
     num_minibatches: int = 8
     """the number of mini-batches"""
-    update_epochs: int = 10 #4
+    update_epochs: int = 8 #10 #4
     """the K epochs to update the policy"""
     norm_adv: bool = True
     """Toggles advantages normalization"""
@@ -123,6 +127,9 @@ class Args:
 
     jianhong_advice: bool = True
     """+ norm init / + reward norm / - norm_adv=False / - clip_vloss=False"""
+
+    agent_path: str = ""
+    """agent path"""
 
 
 def gauss_clusters(
@@ -238,7 +245,7 @@ class GAT(torch.nn.Module):
         history_actions = torch.mean(history_actions, dim=0)
 
         effect = sum(history_r1[-self.history_len:])
-        if effect > 0:
+        if effect > self.history_len*0.5:
             effect_history_actions = torch.ones([1]).to(self.device)
         else:
             effect_history_actions = torch.zeros([1]).to(self.device)
@@ -548,20 +555,35 @@ def main():
     # data generation
 
     # 1. simulation
-    data, labels = gauss_clusters(
-        n_clusters=20,
-        dim=50,
-        pts_cluster=1000,
-        stepsize=6,
-        random_state=None,
-    )
+    if args.dataset=='simulation':
+        data, labels = gauss_clusters(
+            n_clusters=20,
+            dim=50,
+            pts_cluster=1000,
+            stepsize=6,
+            random_state=None,
+        )
+    elif args.dataset=='sc-trans':
+        data = np.load("../DVHL_others/exp2/data.npy")
+        labels = np.load("../DVHL_others/exp2/labels.npy")
+    else:
+        print("wrong dataset!")
+        exit()
+    
     idx = np.random.choice(data.shape[0], 1000, replace=False)
     data, labels = data[idx], labels[idx]
+
     np.save("./runs/{}/data_online_1k.npy".format(run_name), data)
     np.save("./runs/{}/labels_online_1k.npy".format(run_name), labels)
 
     num_partition = len(np.unique(labels))
-    partition = get_partition(data, k=num_partition, labels=None).to(device)           # (data.shape[0], ) -- each entry is a cluster
+    if args.dataset=='simulation':
+        partition = get_partition(data, k=num_partition, labels=None).to(device)           # (data.shape[0], ) -- each entry is a cluster
+    elif args.dataset=='sc-trans':
+        partition = torch.from_numpy(labels).to(device)
+    else:
+        print("wrong dataset!")
+        exit()
 
     # 2. MNIST
     # transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))])
@@ -589,7 +611,8 @@ def main():
         device=device, 
         reward_func=args.reward_func, 
         draw=args.draw, 
-        verbose=args.verbose
+        verbose=args.verbose, 
+        dataset=args.dataset
     )
 
     agent = Agent(
@@ -603,6 +626,8 @@ def main():
         use_multi_gpu=use_multi_gpu, 
         device=device
     ).to(device)
+    if args.agent_path != "":
+        agent.load_state_dict(torch.load(args.agent_path))
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
     print("actor params: {}".format(sum([p.numel() for p in agent.actor.parameters()])))
@@ -757,9 +782,11 @@ def main():
                 envs.best_mse = min(envs.history_mse[-actual_num_steps:])
         elif args.reward_func == 'human-dm':
             # save agent with BEST episodic accumulative rewards
-            if min(envs.history_rewards[-actual_num_steps:]) < envs.best_reward:
+            if sum(envs.history_rewards[-actual_num_steps:]) > envs.best_reward:
                 torch.save(agent.state_dict(), "./runs/{}/best_rewards_agent.pt".format(run_name))
                 envs.best_reward = sum(envs.history_rewards[-actual_num_steps:])
+        else:
+            pass
 
         # bootstrap value if not done
         with torch.no_grad():
@@ -850,7 +877,7 @@ def main():
                     entropy_loss = entropy.mean(dim=0)
                     # print("sub-loss shapes", pg_loss.shape, entropy_loss.shape, v_loss.shape) # (20,) (20,) (20,)
                     loss = pg_loss - args.ent_coef * entropy_loss + args.vf_coef * v_loss
-                    # print("loss: ", loss, pg_loss, entropy_loss, v_loss)
+                    print("loss: ", loss, pg_loss, entropy_loss, v_loss)
                     # with open("./runs/{}/println.txt".format(run_name), 'a') as f:
                     #     print("loss: ", loss, pg_loss, entropy_loss, v_loss, file=f)
                     optimizer.zero_grad()
@@ -921,7 +948,7 @@ def main():
         writer.add_scalar("charts/SPS", int(global_step / (now_time- start_time)), global_step)
 
         # save agent with BEST episodic accumulative reward
-        if torch.sum(envs.history_rewards[-actual_num_steps:]) >= envs.best_epoch_reward:
+        if torch.sum(envs.history_rewards[-actual_num_steps:]) > envs.best_epoch_reward:
             torch.save(agent.state_dict(), "./runs/{}/best_epoch_agent.pt".format(run_name))
             envs.best_epoch_reward = torch.sum(envs.history_rewards[-actual_num_steps:])
 

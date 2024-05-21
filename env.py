@@ -91,9 +91,11 @@ class SiameseNet(nn.Module):
 
 
 class DREnv(Env):
-    def __init__(self, x, label, model_path="./exp1/model_online.pt", action_space=27, history_len=7, save_path=None, num_steps=32, num_partition=20, size=256, run_name=None, inference=False, data=None, labels=None, idx=None, r3_coef=3, device=torch.device('cpu'), reward_func='decision-making', draw=True, verbose=False):
+    def __init__(self, x, label, model_path="./exp1/model_online.pt", action_space=27, history_len=7, save_path=None, num_steps=32, num_partition=20, size=256, run_name=None, inference=False, data=None, labels=None, idx=None, r3_coef=3, device=torch.device('cpu'), reward_func='decision-making', draw=True, verbose=False, dataset='simulation'):
         self.x = x
         self.label = label
+
+        self.dataset = dataset
 
         self.draw = draw
         self.verbose = verbose
@@ -161,15 +163,15 @@ class DREnv(Env):
             pass
 
         # actions
-        if self.inference==False:
-            self.alpha_values = [0.8, 1.0, 1.2]                # value range of ratio of kNN
-            self.beta_values = [0.8, 1.0, 1.2]                 # value range of ratio of mid-pairs
-            self.gamma_values = [0.8, 1.0, 1.2]                # value range of ratio of negatives
-            # self.hetero_homo = [0, 1, 2]                     # 0 - random / 1 - hetero / 2 - homo
-        else:
-            self.alpha_values = [0.5, 1.0, 2.0]                # value range of ratio of kNN
-            self.beta_values = [0.5, 1.0, 2.0]                 # value range of ratio of mid-pairs
-            self.gamma_values = [0.5, 1.0, 2.0]                # value range of ratio of negatives
+        # if self.inference==False:
+        self.alpha_values = [0.8, 1.0, 1.2]                # value range of ratio of kNN
+        self.beta_values = [0.8, 1.0, 1.2]                 # value range of ratio of mid-pairs
+        self.gamma_values = [0.8, 1.0, 1.2]                # value range of ratio of negatives
+        #     # self.hetero_homo = [0, 1, 2]                     # 0 - random / 1 - hetero / 2 - homo
+        # else:
+        #     self.alpha_values = [0.5, 1.0, 2.0]                # value range of ratio of kNN
+        #     self.beta_values = [0.5, 1.0, 2.0]                 # value range of ratio of mid-pairs
+        #     self.gamma_values = [0.5, 1.0, 2.0]                # value range of ratio of negatives
         
         # 3 * 3 * 3 = 27 actions (0,1,...,26)
         self.combinations = np.array(
@@ -210,9 +212,13 @@ class DREnv(Env):
         """
         if initial==True:
 
-            n_neighbors = np.round(np.ones(x.shape[0]) * 20).astype(np.int32) #None
-            MN_ratio = np.ones(x.shape[0]) * 1.0 #0.5 #2.0 # 0.5
-            FP_ratio = np.ones(x.shape[0]) * 5.0 #1.0 #20.0 # 2.0
+            n_neighbors = np.round(np.ones(x.shape[0]) * self.num_partition).astype(np.int32) #None
+            if self.dataset=='simulation':
+                MN_ratio = np.ones(x.shape[0]) * 1.0 #0.5 #2.0 # 0.5
+                FP_ratio = np.ones(x.shape[0]) * 5.0 #1.0 #20.0 # 2.0
+            elif self.dataset=='sc-trans':
+                MN_ratio = np.ones(x.shape[0]) * 0.2 #0.5 #2.0 # 0.5
+                FP_ratio = np.ones(x.shape[0]) * 0.5 #5.0 #1.0 #20.0 # 2.0
 
         num_nodes = x.shape[0]
 
@@ -222,6 +228,8 @@ class DREnv(Env):
                 n_neighbors = np.round(np.ones(x.shape[0]) * 10).astype(np.int32)
             else:
                 n_neighbors = np.round(np.ones(x.shape[0]) * int(round(10 + 15 * (np.log10(num_nodes) - 4)))).astype(np.int32)
+            if self.inference==True and self.dataset=='sc-trans':
+                n_neighbors = np.round(np.ones(x.shape[0]) * 50).astype(np.int32)
         n_MN = np.round(n_neighbors * MN_ratio).astype(np.int32)
         n_FP = np.round(n_neighbors * FP_ratio).astype(np.int32)
 
@@ -477,10 +485,16 @@ class DREnv(Env):
             elif self.reward_func == 'human-dm':
                 z = normalise(z0)
 
-                agc = AgglomerativeClustering(n_clusters=None, distance_threshold=0.5)
-                agc.fit(z)
+                if self.dataset=='simulation':
+                    agc = AgglomerativeClustering(n_clusters=None, distance_threshold=0.5)
+                    agc.fit(z)
+                    lbs = agc.labels_
+                elif self.dataset=='sc-trans':
+                    lbs = self.label
+                else:
+                    exit()
 
-                features = generate_features(z=z, labels=agc.labels_, data=self.x).reshape(1,-1)
+                features = generate_features(z=z, labels=lbs, data=self.x).reshape(1,-1)
 
                 feat1 = np.hstack([features, self.last_feats]).reshape(1,-1)
                 feat2 = np.hstack([features, self.best_feats]).reshape(1,-1)
@@ -507,12 +521,39 @@ class DREnv(Env):
                 self.last_feats = features
 
                 # update best
-                if r2>0:
+                if r2>0.5:
                     self.best_feats = features
                     self.best_name = name
 
                 reward_info = " reward: {:.4f}+{:.4f}".format(r1, r2)
                 
+            elif self.reward_func == 'real-human':
+                if self.draw:
+
+                    plt.cla()
+                    draw_z(
+                        z=normalise(z0), 
+                        cls=self.label, #np.ones((z.shape[0], 1)), 
+                        s=1, 
+                        save_path=os.path.join(self.save_path, name), 
+                        display=False, 
+                        title=name, 
+                        palette='Spectral' # None
+                    )
+                    print("img saved to {}".format(os.path.join(self.save_path, name)))
+                
+                print("The current best is: {}".format(self.best_id))
+                r1 = float(input("Is this visualization better than LAST?\n\t"))
+                r2 = float(input("Is this visualization better than BEST {}?\n\t".format(self.best_id)))
+                r = r1 + r2
+
+                if r2>0:
+                    self.best_id = self.step
+
+                # r = r1
+                # reward_info = " reward: {:.4f}".format(r1)
+
+                reward_info = " reward: {:.4f} + {:.4f}".format(r1, r2)
 
             else:
                 print("wrong reward_func!")
@@ -727,15 +768,30 @@ class DREnv(Env):
 
             z = normalise(z0)
 
-            agc = AgglomerativeClustering(n_clusters=None, distance_threshold=0.5)
-            agc.fit(z)
+            if self.dataset=='simulation':
+                agc = AgglomerativeClustering(n_clusters=None, distance_threshold=0.5)
+                agc.fit(z)
+                lbs = agc.labels_
+            elif self.dataset=='sc-trans':
+                lbs = self.label
+            else:
+                exit()
 
-            features = generate_features(z=z, labels=agc.labels_, data=self.x)
+            features = generate_features(z=z, labels=lbs, data=self.x)
 
             self.best_feats = np.ones((1,14))
             self.last_feats = np.ones((1,14))
 
-            self.rf = pickle.load(open("./rf.pkl", "rb"))
+            if self.dataset == 'simulation':
+                self.rf = pickle.load(open("./rf.pkl", "rb"))
+            elif self.dataset == 'sc-trans':
+                self.rf = pickle.load(open("./rf_exp2.pkl", "rb"))
+            else:
+                print("wrong dataset")
+                exit()
+
+        elif self.reward_func == 'real-human':
+            self.best_id = -1
 
         else:
             print("wrong reward_func!")
