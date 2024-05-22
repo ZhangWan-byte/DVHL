@@ -1,10 +1,26 @@
-# Data Visualisation and Human-in-the-loop
+# Neighbor Graph Maneuver for Human-Centered Visualization (HUCAN)
 
-## MM-I
+## Human Surrogate Training
 
-    - parametric UMAP
+- exp1.ipynb
+- exp2.ipynb
 
-## MM-II
+codes and data path to be modified.
 
-    - VisualImitation module
-    - human model
+## Pre-train
+
+```setup
+    python ppo.py
+```
+
+## Fine-tune
+
+```setup
+    python inference.py
+```
+
+**Note:** Available parameters can be viewed using
+
+```setup
+    python ppo.py --help
+```
