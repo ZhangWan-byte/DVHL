@@ -63,7 +63,7 @@ class Args:
 
     # Dataset
     dataset: str = "sc-trans"
-    """simulation / sc-trans"""
+    """simulation / sc-trans / mnist"""
 
     # Algorithm specific arguments
     env_id: str = "DVHL" # "CartPole-v1"
@@ -509,10 +509,12 @@ def mytrain(agent, args, actual_batch_size, b_obs, b_logprobs, b_actions, b_valu
 # @profile
 def main():
     args = tyro.cli(Args)
-    args.batch_size = int(args.num_envs * args.num_steps)                   # 1 * 32
-    args.minibatch_size = int(args.batch_size // args.num_minibatches)      # 32 // 8 = 4
-    args.num_iterations = args.total_timesteps // args.batch_size           # [3200/32]=100
+    args.batch_size = int(args.num_envs * args.num_steps)                   # 1 * 32                1 * 8
+    args.minibatch_size = int(args.batch_size // args.num_minibatches)      # 32 // 8 = 4           8 // 4 = 2
+    args.num_iterations = args.total_timesteps // args.batch_size           # [3200/32]=100         [1600/8]=200
     
+    print(args.num_iterations, args.minibatch_size, args.num_steps)
+
     if args.jianhong_advice==True:
         args.norm_adv = False
         args.clip_vloss = False
@@ -563,9 +565,14 @@ def main():
             stepsize=6,
             random_state=None,
         )
+    # 2. single-cell transcriptomics
     elif args.dataset=='sc-trans':
         data = np.load("../DVHL_others/exp2/data.npy")
         labels = np.load("../DVHL_others/exp2/labels.npy")
+    # 3. MNIST
+    elif args.dataset=='mnist':
+        data = np.load("./data/MNIST/X_train.npy")
+        labels = np.load("./data/MNIST/y_train.npy")
     else:
         print("wrong dataset!")
         exit()
@@ -581,6 +588,8 @@ def main():
         partition = get_partition(data, k=num_partition, labels=None).to(device)           # (data.shape[0], ) -- each entry is a cluster
     elif args.dataset=='sc-trans':
         partition = torch.from_numpy(labels).to(device)
+    elif args.dataset=='mnist':
+        partition = get_partition(data, k=num_partition, labels=None).to(device)
     else:
         print("wrong dataset!")
         exit()
@@ -712,6 +721,7 @@ def main():
                         break
 
             if terminate_iter == True:
+                print("================== terminate_iter is True ==================")
                 break
             else:
                 values_0[step] = value.flatten().view(-1,1)

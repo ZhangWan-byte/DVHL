@@ -137,6 +137,10 @@ class InferenceAgent(nn.Module):
         # 1. obtain logits
         with autocast():
             logits = self.actor(state, partition)
+            print(logits)
+
+            logits = torch.mean(logits / 0.01, dim=0, keepdim=True)
+            logits = F.softmax(logits, dim=1)
 
         # 2. obtain action
         if search_type=='random':
@@ -188,7 +192,8 @@ class InferenceAgent(nn.Module):
         else:
             print("not implemented search algorithm!")
             exit()
-        
+        logits = torch.vstack([logits]*10)
+        action = torch.vstack([action]*10).view(-1)
         return logits, action.cuda()
 
 
@@ -225,6 +230,9 @@ def main():
     elif args.dataset=='sc-trans':
         data = np.load("../DVHL_others/exp2/data.npy")
         labels = np.load("../DVHL_others/exp2/labels.npy")
+    elif args.dataset=='mnist':
+        data = np.load("./data/MNIST/X_train.npy")
+        labels = np.load("./data/MNIST/y_train.npy")
     else:
         print("wrong dataset!")
         exit()
@@ -239,8 +247,13 @@ def main():
     num_partition = len(np.unique(labels))
     if args.dataset=='simulation':
         partition = get_partition(data, k=num_partition, labels=None).to(device)           # (data.shape[0], ) -- each entry is a cluster
+        num_node_features = 50
     elif args.dataset=='sc-trans':
         partition = torch.from_numpy(labels).to(device)
+        num_node_features = 50
+    elif args.dataset=='mnist':
+        partition = get_partition(data, k=num_partition, labels=None).to(device)
+        num_node_features = 784
     else:
         print("wrong dataset!")
         exit()
@@ -278,7 +291,7 @@ def main():
     agent = InferenceAgent(
         envs, 
         num_policy=6, 
-        num_node_features=50, 
+        num_node_features=num_node_features, 
         hidden=32, 
         history_len=7, 
         num_actions=27, 
@@ -309,6 +322,7 @@ def main():
 
         while True:
             log_prob, action = agent.search(next_obs, partition=partition, search_type=args.search)
+            print(log_prob.shape, action.shape)
             hp = envs.combinations[action.detach().cpu() % len(envs.combinations)]
             alpha, beta, gamma = hp[:, 0], hp[:, 1], hp[:, 2]
 

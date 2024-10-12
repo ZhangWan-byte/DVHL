@@ -219,6 +219,9 @@ class DREnv(Env):
             elif self.dataset=='sc-trans':
                 MN_ratio = np.ones(x.shape[0]) * 0.2 #0.5 #2.0 # 0.5
                 FP_ratio = np.ones(x.shape[0]) * 0.5 #5.0 #1.0 #20.0 # 2.0
+            elif self.dataset=='mnist':
+                MN_ratio = np.ones(x.shape[0]) * 0.5
+                FP_ratio = np.ones(x.shape[0]) * 2.0
 
         num_nodes = x.shape[0]
 
@@ -491,6 +494,10 @@ class DREnv(Env):
                     lbs = agc.labels_
                 elif self.dataset=='sc-trans':
                     lbs = self.label
+                elif self.dataset=='mnist':
+                    agc = AgglomerativeClustering(n_clusters=None, distance_threshold=0.5)
+                    agc.fit(z)
+                    lbs = agc.labels_
                 else:
                     exit()
 
@@ -774,6 +781,10 @@ class DREnv(Env):
                 lbs = agc.labels_
             elif self.dataset=='sc-trans':
                 lbs = self.label
+            elif self.dataset=='mnist':
+                agc = AgglomerativeClustering(n_clusters=None, distance_threshold=0.5)
+                agc.fit(z)
+                lbs = agc.labels_
             else:
                 exit()
 
@@ -783,9 +794,11 @@ class DREnv(Env):
             self.last_feats = np.ones((1,14))
 
             if self.dataset == 'simulation':
-                self.rf = pickle.load(open("./rf.pkl", "rb"))
+                self.rf = pickle.load(open("./rf_exp1.pkl", "rb"))
             elif self.dataset == 'sc-trans':
                 self.rf = pickle.load(open("./rf_exp2.pkl", "rb"))
+            elif self.dataset == 'mnist':
+                self.rf = pickle.load(open("./rf_exp3.pkl", "rb"))
             else:
                 print("wrong dataset")
                 exit()

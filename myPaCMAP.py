@@ -109,12 +109,23 @@ def sample_FP(n_samples, maximum, reject_ind):
 def mysum(arr):
     return np.sum(arr)
 
-@numba.njit("i4[:,:](f4[:,:],f4[:,:],i4[:,:],i4[:])", parallel=True, nogil=True, cache=True)
-def sample_neighbors_pair(X, scaled_dist, nbrs, n_neighbors):
+@numba.njit("i4[:,:](f4[:,:],f4[:,:],i4[:,:],i4[:],i4[:])", parallel=True, nogil=True, cache=True)
+def sample_neighbors_pair(X, scaled_dist, nbrs, n_neighbors, near):
+    """sample k nearest neighbors for each point
+
+    :param X: high-dimensional data
+    :param scaled_dist: distance matrix
+    :param nbrs: _description_
+    :param n_neighbors: a list of number of kNN to sample
+    :param near: nearest or furtherest points to preserve, defaults to [1,1,...,1]; 1 - nearest / 0 - furtherest
+    :return: _description_
+    """
     # n_neighbors is an numpy array in shape (n,), each entry indicates the number of neighbors to be preserved
     n = X.shape[0]
     # pair_neighbors = np.empty((n*n_neighbors, 2), dtype=np.int32)
     pair_neighbors = np.empty((n_neighbors.sum(), 2), dtype=np.int32)
+
+    # near = np.ones(n).astype(np.int32)
 
     for i in numba.prange(n):
         scaled_sort = np.argsort(scaled_dist[i])
@@ -124,7 +135,15 @@ def sample_neighbors_pair(X, scaled_dist, nbrs, n_neighbors):
             # pair_neighbors[i*n_neighbors + j][0] = i
             # pair_neighbors[i*n_neighbors + j][1] = nbrs[i][scaled_sort[j]]
             pair_neighbors[mysum(n_neighbors[:i]) + j][0] = i
-            pair_neighbors[mysum(n_neighbors[:i]) + j][1] = nbrs[i][scaled_sort[j]]
+            if near[i]==1:
+                # add nearest neighbors sequentially
+                pair_neighbors[mysum(n_neighbors[:i]) + j][1] = nbrs[i][scaled_sort[j]]
+            elif near[i]==0:
+                # add furtherest neighbors sequentially
+                pair_neighbors[mysum(n_neighbors[:i]) + j][1] = nbrs[i][-scaled_sort[j]]
+            else:
+                print("Wrong near param in 'sample_neighbors_pair'!")
+                # exit()
         # print("2", i)
 
     # for i in range(n):
@@ -288,52 +307,55 @@ def update_embedding_adam(Y, grad, m, v, beta1, beta2, lr, itr):
             Y[i][d] -= lr_t * m[i][d]/(math.sqrt(v[i][d]) + 1e-7)
 
 
-@numba.njit("f4[:,:](f4[:,:],i4[:,:],i4[:,:],i4[:,:],f4,f4,f4)", parallel=True, nogil=True, cache=True)
-def pacmap_grad(Y, pair_neighbors, pair_MN, pair_FP, w_neighbors, w_MN, w_FP):
+@numba.njit("f4[:,:](f4[:,:],i4[:,:],i4[:,:],i4[:,:],f4,f4,f4,i4[:])", parallel=True, nogil=True, cache=True)
+def pacmap_grad(Y, pair_neighbors, pair_MN, pair_FP, w_neighbors, w_MN, w_FP, use_N_MN_FP):
     '''Calculate the gradient for pacmap embedding given the particular set of weights.'''
     n, dim = Y.shape
     grad = np.zeros((n+1, dim), dtype=np.float32)
     y_ij = np.empty(dim, dtype=np.float32)
     loss = np.zeros(4, dtype=np.float32)
     # NN
-    for t in range(pair_neighbors.shape[0]):
-        i = pair_neighbors[t, 0]
-        j = pair_neighbors[t, 1]
-        d_ij = 1.0
-        for d in range(dim):
-            y_ij[d] = Y[i, d] - Y[j, d]
-            d_ij += y_ij[d] ** 2
-        loss[0] += w_neighbors * (d_ij/(10. + d_ij))
-        w1 = w_neighbors * (20./(10. + d_ij) ** 2)
-        for d in range(dim):
-            grad[i, d] += w1 * y_ij[d]
-            grad[j, d] -= w1 * y_ij[d]
+    if use_N_MN_FP[0]==1:
+        for t in range(pair_neighbors.shape[0]):
+            i = pair_neighbors[t, 0]
+            j = pair_neighbors[t, 1]
+            d_ij = 1.0
+            for d in range(dim):
+                y_ij[d] = Y[i, d] - Y[j, d]
+                d_ij += y_ij[d] ** 2
+            loss[0] += w_neighbors * (d_ij/(10. + d_ij))
+            w1 = w_neighbors * (20./(10. + d_ij) ** 2)
+            for d in range(dim):
+                grad[i, d] += w1 * y_ij[d]
+                grad[j, d] -= w1 * y_ij[d]
     # MN
-    for tt in range(pair_MN.shape[0]):
-        i = pair_MN[tt, 0]
-        j = pair_MN[tt, 1]
-        d_ij = 1.0
-        for d in range(dim):
-            y_ij[d] = Y[i][d] - Y[j][d]
-            d_ij += y_ij[d] ** 2
-        loss[1] += w_MN * d_ij/(10000. + d_ij)
-        w = w_MN * 20000./(10000. + d_ij) ** 2
-        for d in range(dim):
-            grad[i, d] += w * y_ij[d]
-            grad[j, d] -= w * y_ij[d]
+    if use_N_MN_FP[1]==1:
+        for tt in range(pair_MN.shape[0]):
+            i = pair_MN[tt, 0]
+            j = pair_MN[tt, 1]
+            d_ij = 1.0
+            for d in range(dim):
+                y_ij[d] = Y[i][d] - Y[j][d]
+                d_ij += y_ij[d] ** 2
+            loss[1] += w_MN * d_ij/(10000. + d_ij)
+            w = w_MN * 20000./(10000. + d_ij) ** 2
+            for d in range(dim):
+                grad[i, d] += w * y_ij[d]
+                grad[j, d] -= w * y_ij[d]
     # FP
-    for ttt in range(pair_FP.shape[0]):
-        i = pair_FP[ttt, 0]
-        j = pair_FP[ttt, 1]
-        d_ij = 1.0
-        for d in range(dim):
-            y_ij[d] = Y[i, d] - Y[j, d]
-            d_ij += y_ij[d] ** 2
-        loss[2] += w_FP * 1./(1. + d_ij)
-        w1 = w_FP * 2./(1. + d_ij) ** 2
-        for d in range(dim):
-            grad[i, d] -= w1 * y_ij[d]
-            grad[j, d] += w1 * y_ij[d]
+    if use_N_MN_FP[2]==1:
+        for ttt in range(pair_FP.shape[0]):
+            i = pair_FP[ttt, 0]
+            j = pair_FP[ttt, 1]
+            d_ij = 1.0
+            for d in range(dim):
+                y_ij[d] = Y[i, d] - Y[j, d]
+                d_ij += y_ij[d] ** 2
+            loss[2] += w_FP * 1./(1. + d_ij)
+            w1 = w_FP * 2./(1. + d_ij) ** 2
+            for d in range(dim):
+                grad[i, d] -= w1 * y_ij[d]
+                grad[j, d] += w1 * y_ij[d]
     grad[-1, 0] = loss.sum()
     return grad
 
@@ -508,14 +530,16 @@ def generate_pair(
         n_FP,
         distance='euclidean',
         verbose=True,
-        mode=0
+        mode=0, 
+        nn_extra=50, 
+        near=None
 ):
     '''Generate pairs for the dataset.
     '''
     n, dim = X.shape
     # sample more neighbors than needed
     # n_neighbors_extra = min(n_neighbors + 50, n - 1)
-    n_neighbors_extra = np.array(list(map(lambda x:min(x+50, n-1), n_neighbors)), dtype=np.int32)
+    n_neighbors_extra = np.array(list(map(lambda x:min(x+nn_extra, n-1), n_neighbors)), dtype=np.int32)
 
     tree = AnnoyIndex(dim, metric=distance)
     if _RANDOM_STATE is not None:
@@ -539,7 +563,7 @@ def generate_pair(
     print_verbose("Calculated sigma", verbose)
     scaled_dist = scale_dist(knn_distances, sig, nbrs)
     print_verbose("Found scaled dist", verbose)
-    pair_neighbors = sample_neighbors_pair(X, scaled_dist, nbrs, n_neighbors)
+    pair_neighbors = sample_neighbors_pair(X, scaled_dist, nbrs, n_neighbors, near)
     print_verbose("Obtained pair neighbors", verbose)
     if _RANDOM_STATE is None:
         pair_MN = sample_MN_pair(X, n_MN, option, mode)
@@ -589,7 +613,8 @@ def pacmap(
         intermediate,
         inter_snapshots,
         pca_solution,
-        tsvd=None
+        tsvd=None, 
+        use_N_MN_FP=np.array([[1,1,1]]).astype(np.int32)
 ):
     start_time = time.time()
     n, _ = X.shape
@@ -640,7 +665,7 @@ def pacmap(
         w_MN, w_neighbors, w_FP = find_weight(w_MN_init, itr, num_iters=num_iters)
 
         grad = pacmap_grad(Y, pair_neighbors, pair_MN,
-                           pair_FP, w_neighbors, w_MN, w_FP)
+                           pair_FP, w_neighbors, w_MN, w_FP, use_N_MN_FP=use_N_MN_FP)
         C = grad[-1, 0]
         if verbose and itr == 0:
             print(f"Initial Loss: {C}")
@@ -867,7 +892,9 @@ class myPaCMAP(BaseEstimator):
                  intermediate_snapshots=[
                      0, 10, 30, 60, 100, 120, 140, 170, 200, 250, 300, 350, 450],
                  random_state=None,
-                 save_tree=False
+                 save_tree=False, 
+                 nn_extra=None, 
+                 near=None
                  ):
         self.n_components = n_components
         self.n_neighbors = n_neighbors
@@ -884,6 +911,9 @@ class myPaCMAP(BaseEstimator):
         self.intermediate = intermediate
         self.save_tree = save_tree
         self.intermediate_snapshots = intermediate_snapshots
+
+        self.nn_extra=nn_extra
+        self.near=near
 
         global _RANDOM_STATE
         if random_state is not None:
@@ -926,11 +956,11 @@ class myPaCMAP(BaseEstimator):
         if min(self.n_neighbors) < 1:
             raise ValueError(
                 "The number of nearest neighbors can't be less than 1")
-        if min(self.n_FP) < 1:
-            raise ValueError(
-                "The number of further points can't be less than 1")
+        # if min(self.n_FP) < 1:
+        #     raise ValueError(
+        #         "The number of further points can't be less than 1")
 
-    def fit(self, X, n_neighbors=None, n_MN=None, n_FP=None, init=None, save_pairs=True):
+    def fit(self, X, n_neighbors=None, n_MN=None, n_FP=None, init=None, save_pairs=True, use_N_MN_FP=np.array([1,1,1]).astype(np.int32)):
         '''Projects a high dimensional dataset into a low-dimensional embedding, without returning the output.
 
         Parameters
@@ -955,6 +985,9 @@ class myPaCMAP(BaseEstimator):
 
         save_pairs: bool, optional
             Whether to save the pairs that are sampled from the dataset. Useful for reproducing results.
+
+        use_N_MN_FP: np.array([1, 1, 1]).astype(np.int32)
+            Whether to consider n_neighbors, mid-pairs, and false-positives during gradient descent
         '''
 
         X = np.copy(X).astype(np.float32)
@@ -1011,13 +1044,14 @@ class myPaCMAP(BaseEstimator):
             self.intermediate,
             self.intermediate_snapshots,
             pca_solution,
-            self.tsvd_transformer
+            self.tsvd_transformer, 
+            use_N_MN_FP=use_N_MN_FP
         )
         if not save_pairs:
             self.del_pairs()
         return self
 
-    def fit_transform(self, X, n_neighbors=None, n_MN=None, n_FP=None, init=None, save_pairs=True):
+    def fit_transform(self, X, n_neighbors=None, n_MN=None, n_FP=None, init=None, save_pairs=True, use_N_MN_FP=[1,1,1]):
         '''Projects a high dimensional dataset into a low-dimensional embedding and return the embedding.
 
         Parameters
@@ -1042,7 +1076,7 @@ class myPaCMAP(BaseEstimator):
         if n_FP is not None:
             self.n_FP = n_FP
 
-        self.fit(X, n_neighbors, n_MN, n_FP, init, save_pairs)
+        self.fit(X, n_neighbors, n_MN, n_FP, init, save_pairs, use_N_MN_FP=use_N_MN_FP)
         if self.intermediate:
             return self.intermediate_states
         else:
@@ -1120,7 +1154,7 @@ class myPaCMAP(BaseEstimator):
         print_verbose("Finding pairs", self.verbose)
         if self.pair_neighbors is None:
             self.pair_neighbors, self.pair_MN, self.pair_FP, self.tree = generate_pair(
-                X, self.n_neighbors, self.n_MN, self.n_FP, self.distance, self.verbose
+                X, self.n_neighbors, self.n_MN, self.n_FP, self.distance, self.verbose, 0, self.nn_extra, self.near
             )
             print_verbose("Pairs sampled successfully.", self.verbose)
         elif self.pair_MN is None and self.pair_FP is None:
