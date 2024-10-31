@@ -537,6 +537,8 @@ def generate_pair(
     '''Generate pairs for the dataset.
     '''
     n, dim = X.shape
+    if near==None:
+        near = np.ones(n).astype(int)
     # sample more neighbors than needed
     # n_neighbors_extra = min(n_neighbors + 50, n - 1)
     n_neighbors_extra = np.array(list(map(lambda x:min(x+nn_extra, n-1), n_neighbors)), dtype=np.int32)

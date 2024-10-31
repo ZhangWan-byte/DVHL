@@ -247,58 +247,58 @@ class DREnv(Env):
         n_FP = np.round(n_neighbors * FP_ratio).astype(np.int32)
 
 
-        if self.reward_func != 'human-dm-surrogate':
-            # generate kNN neighbors, mid-pairs, negatives
-            pair_neighbors, pair_MN, pair_FP, tree = generate_pair(
-                x, n_neighbors, n_MN, n_FP, distance='euclidean', verbose=False
-            )
+        # if self.reward_func != 'human-dm-surrogate':
+        # generate kNN neighbors, mid-pairs, negatives
+        pair_neighbors, pair_MN, pair_FP, tree = generate_pair(
+            x, n_neighbors, n_MN, n_FP, distance='euclidean', verbose=False
+        )
 
-            # add virtual node
-            x = np.vstack([x, np.mean(x, axis=0)])
-            
-            # edge index
-            pair_VN = np.array([(i, num_nodes) for i in range(num_nodes)] + [(num_nodes, i) for i in range(num_nodes)])
-            edge_index = np.vstack([pair_neighbors, pair_MN, pair_FP, pair_VN])
+        # add virtual node
+        x = np.vstack([x, np.mean(x, axis=0)])
+        
+        # edge index
+        pair_VN = np.array([(i, num_nodes) for i in range(num_nodes)] + [(num_nodes, i) for i in range(num_nodes)])
+        edge_index = np.vstack([pair_neighbors, pair_MN, pair_FP, pair_VN])
 
-            # edge feats
-            edge_attr = np.zeros((edge_index.shape[0], 4))
-            edge_attr[:pair_neighbors.shape[0], 0] = 1                                                      # knn
-            edge_attr[pair_neighbors.shape[0]:pair_neighbors.shape[0]+pair_MN.shape[0], 1] = 1              # mid-pair
-            edge_attr[pair_neighbors.shape[0]+pair_MN.shape[0]:pair_neighbors.shape[0]+pair_MN.shape[0]+pair_FP.shape[0], 2] = 1    # FP
-            edge_attr[pair_neighbors.shape[0]+pair_MN.shape[0]+pair_FP.shape[0]:, 3] = 1                    # VN
+        # edge feats
+        edge_attr = np.zeros((edge_index.shape[0], 4))
+        edge_attr[:pair_neighbors.shape[0], 0] = 1                                                      # knn
+        edge_attr[pair_neighbors.shape[0]:pair_neighbors.shape[0]+pair_MN.shape[0], 1] = 1              # mid-pair
+        edge_attr[pair_neighbors.shape[0]+pair_MN.shape[0]:pair_neighbors.shape[0]+pair_MN.shape[0]+pair_FP.shape[0], 2] = 1    # FP
+        edge_attr[pair_neighbors.shape[0]+pair_MN.shape[0]+pair_FP.shape[0]:, 3] = 1                    # VN
 
-            edge_index = edge_index.transpose()
-            edge_index = edge_index[[1, 0]]         # message: src -> tgt
+        edge_index = edge_index.transpose()
+        edge_index = edge_index[[1, 0]]         # message: src -> tgt
 
-            # generate state
-            state = {
-                "x": torch.from_numpy(x).to(self.device), 
-                "label": torch.from_numpy(label).to(self.device), 
-                "edge_index": torch.from_numpy(edge_index).long().to(self.device), 
-                "edge_attr": torch.from_numpy(edge_attr).to(self.device), 
-    
-                "history": [i.to(self.device) for i in self.history], 
+        # generate state
+        state = {
+            "x": torch.from_numpy(x).to(self.device), 
+            "label": torch.from_numpy(label).to(self.device), 
+            "edge_index": torch.from_numpy(edge_index).long().to(self.device), 
+            "edge_attr": torch.from_numpy(edge_attr).to(self.device), 
 
-                "n_neighbors": n_neighbors, 
-                "MN_ratio": MN_ratio, 
-                "FP_ratio": FP_ratio, 
+            "history": [i.to(self.device) for i in self.history], 
 
-                "pair_neighbors": pair_neighbors,
-                "pair_MN": pair_MN, 
-                "pair_FP": pair_FP
-            }
+            "n_neighbors": n_neighbors, 
+            "MN_ratio": MN_ratio, 
+            "FP_ratio": FP_ratio, 
 
-        else:
+            "pair_neighbors": pair_neighbors,
+            "pair_MN": pair_MN, 
+            "pair_FP": pair_FP
+        }
 
-            state = {
-                "x": torch.from_numpy(x).to(self.device), 
-                "label": torch.from_numpy(label).to(self.device),
-                "history": [i.to(self.device) for i in self.history], 
+        # else:
 
-                "n_neighbors": n_neighbors, 
-                "MN_ratio": MN_ratio, 
-                "FP_ratio": FP_ratio, 
-            }
+        #     state = {
+        #         "x": torch.from_numpy(x).to(self.device), 
+        #         "label": torch.from_numpy(label).to(self.device),
+        #         "history": [i.to(self.device) for i in self.history], 
+
+        #         "n_neighbors": n_neighbors, 
+        #         "MN_ratio": MN_ratio, 
+        #         "FP_ratio": FP_ratio, 
+        #     }
 
         return state
 

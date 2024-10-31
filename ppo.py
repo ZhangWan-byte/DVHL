@@ -331,7 +331,7 @@ class PolicyEnsemble(nn.Module):
         super().__init__()
         self.base_models = nn.ModuleList([])
         for i in range(num_models):
-            if model == 'GAT':
+            if model == 'GNN':
                 base = GAT(
                     num_node_features, 
                     hidden, 
@@ -550,7 +550,7 @@ def main():
     # partition-based control
     if args.num_partition == 1:
         num_partition = 1
-        partition = torch.zeros(data.shape[0]).to(device)
+        partition = torch.zeros(data.shape[0]).int().to(device)
     else:
         num_partition = len(np.unique(labels))
         if args.dataset=='simulation':
@@ -660,21 +660,23 @@ def main():
                 # handle accident or illegal situation
                 while True:
                     action, logprob, _, value = agent.get_action_and_value(next_obs, partition=partition, inference=True)
-                    print("action: ", action)
+                    print("action idx: ", action)
                     hp = envs.combinations[action.detach().cpu() % len(envs.combinations)]
                     hp = hp.reshape(-1,3)
+                    print("action: ", hp)
                     alpha, beta, gamma = hp[:, 0], hp[:, 1], hp[:, 2]
 
-                    alpha = {k:alpha[k] for k in range(len(alpha))}
-                    alpha = [alpha[i.item()] for i in partition]
+                    if args.reward_func != 'human-dm-surrogate':
+                        alpha = {k:alpha[k] for k in range(len(alpha))}
+                        alpha = [alpha[i.item()] for i in partition]
 
-                    beta = {k:alpha[k] for k in range(len(beta))}
-                    beta = [beta[i.item()] for i in partition]
+                        beta = {k:alpha[k] for k in range(len(beta))}
+                        beta = [beta[i.item()] for i in partition]
 
-                    gamma = {k:alpha[k] for k in range(len(gamma))}
-                    gamma = [gamma[i.item()] for i in partition]
+                        gamma = {k:alpha[k] for k in range(len(gamma))}
+                        gamma = [gamma[i.item()] for i in partition]
 
-                    print(alpha[0], beta[0], gamma[0])
+                        print(alpha[0], beta[0], gamma[0])
 
                     n_neighbors = np.round(alpha * envs.current_state["n_neighbors"]).astype(np.int32)
                     MN_ratio = beta * envs.current_state["MN_ratio"]
@@ -732,8 +734,16 @@ def main():
             with open("./runs/{}/println.txt".format(run_name), 'a') as f:
                     print("iter{}_step{}\tcurrent:{}\tbest:{}\tr1:{}\tr2:{}\tr:{}".format(
                         iteration, step, envs.features, envs.best_feats, envs.r1, envs.r2, reward), file=f)
-            print("iter{}_step{}\tcurrent:{}\taction:{}\tbest:{}\tr1:{}\tr2:{}\tr:{}".format(
+            print("iter{}_step{}\tcurrent:{}\tbest:{}\taction:{}\tr1:{}\tr2:{}\tr:{}\n\n".format(
                         iteration, step, envs.features, envs.best_feats, action, envs.r1, envs.r2, reward))
+
+        with open("./runs/{}/best_params.txt".format(run_name), 'a') as f:
+            print("{}\t{}\t{}\t{}".format(
+                iteration, 
+                envs.best_feats[0].item(), 
+                envs.best_feats[1].item(), 
+                envs.best_feats[2].item()
+                ), file=f)
 
         if args.cuda:
             torch.cuda.empty_cache()
