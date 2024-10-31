@@ -62,7 +62,7 @@ class Args:
     """whether to capture videos of the agent performances (check out `videos` folder)"""
 
     # Dataset
-    dataset: str = "sc-trans"
+    dataset: str = "simulation"
     """simulation / sc-trans / mnist"""
 
     # Algorithm specific arguments
@@ -108,8 +108,16 @@ class Args:
     """the number of processes for CPU parallel training"""
 
     # reward func
-    reward_func: str = 'human-dm' #'decision-making'
-    """decision-making / human-vis / human-dm"""
+    reward_func: str = 'human-dm-surrogate'     # use ruiyuan_MLP as surrogate 
+    """decision-making / human-vis / human-dm / human-dm-surrogate"""
+
+    # partition-based control
+    num_partition: int = 1
+    """=1: only 1 partition; >1: default 20"""
+
+    # policy network
+    policy_model: str = 'GNN'
+    """GNN / MLP"""
 
     # draw
     draw: bool = True
@@ -271,43 +279,89 @@ class GAT(torch.nn.Module):
         return cluster_means
 
 
-def forward_pass_single_model(params):
-    model, state, partition = params
-    
-    with torch.no_grad():
-        return model(state, partition)
+class my_MLP_forward_embed(nn.Module):
+    """A simple MLP used for supervised learning
+    In order to check the performance of the model
+    and how many inputs are needed for learning-kry 24th,10,2024"""
+    def __init__(self, layers, embedding_dim, input_dim, device):
+        super(my_MLP_forward_embed, self).__init__()
+        self.embedding_dim = embedding_dim
+        self.layers = nn.ModuleList()
+        self.embedx1 = nn.Linear(input_dim, embedding_dim)
+        self.embedx2 = nn.Linear(embedding_dim, embedding_dim*3)
+        self.embedz1 = nn.Linear(input_dim, embedding_dim)
+        self.embedz2 = nn.Linear(embedding_dim, embedding_dim*3)
+        for i in range(len(layers) - 1):
+            self.layers.append(nn.Linear(layers[i], layers[i + 1]))
+        self.activation = nn.Sigmoid()
+        
+        self.device = device
 
+    def forward(self, state, partition):
+
+        k, m, n = state["n_neighbors"][0], state["MN_ratio"][0], state["FP_ratio"][0]
+        x = torch.tensor([k, m, n, k, m, n]).view(1,-1).float().to(self.device)
+
+        # print("x: ", x.shape)
+
+        B_x = self.embedx2(self.activation(self.embedx1(x))).unsqueeze(1)
+        B_z = self.embedz2(self.activation(self.embedz1(x))).unsqueeze(1)
+
+        B_x = B_x.reshape(B_x.shape[0], 3, -1)
+        B_z = B_z.reshape(B_z.shape[0], 3, -1)
+
+        # print(B_x.shape, B_z.shape) 
+
+        B = torch.hstack([B_x, B_z])
+        x = x.unsqueeze(1)
+
+        # print(x.shape, B.shape)
+
+        x = 2.0 * 3.1415926 * x @ B
+        x = x.squeeze(1)
+        x = torch.cat([torch.sin(x), torch.cos(x)], dim=-1)
+
+        for i in range(len(self.layers)):
+            x = self.activation(self.layers[i](x))
+
+        return x
 
 class PolicyEnsemble(nn.Module):
-    def __init__(self, num_models, num_node_features, hidden, num_actions, out_dim, std, history_len, num_partition, device):
+    def __init__(self, num_models, num_node_features, hidden, num_actions, out_dim, std, history_len, num_partition, device, model='MLP'):
         super().__init__()
         self.base_models = nn.ModuleList([])
         for i in range(num_models):
-            base = GAT(
-                num_node_features, 
-                hidden, 
-                num_actions=num_actions, 
-                out_dim=out_dim, 
-                std=std, 
-                history_len=history_len-i, 
-                num_partition=num_partition, 
-                device=device
-            )
+            if model == 'GAT':
+                base = GAT(
+                    num_node_features, 
+                    hidden, 
+                    num_actions=num_actions, 
+                    out_dim=out_dim, 
+                    std=std, 
+                    history_len=history_len-i, 
+                    num_partition=num_partition, 
+                    device=device
+                )
+            elif model == 'MLP':
+                base = my_MLP_forward_embed(
+                    [128,64,32,out_dim],
+                    embedding_dim = int(128/2),
+                    input_dim = 6, 
+                    device = device
+                ).to(device)
+            else:
+                print("wrong model name!")
+                exit()
+
             self.base_models.append(base)
 
     def forward(self, state, partition=None):
 
-        # indices = np.random.choice(len(self.base_models), round(len(self.base_models)*0.8), replace=False)
-
         results = []
         for i, base_model in enumerate(self.base_models):
-            # if i not in indices:
-            #     continue
             out = base_model(state, partition)                  # (num_partition, out_dim)
             results.append(out)
 
-        # with mp.Pool() as pool:
-        #     results = pool.map(forward_pass_single_model, [(model, state, partition) for model in self.base_models])
 
         results = torch.stack(results, dim=0).mean(dim=0)       # (num_partition, out_dim)
 
@@ -315,27 +369,9 @@ class PolicyEnsemble(nn.Module):
 
 
 class Agent(nn.Module):
-    def __init__(self, envs, num_policy=6, num_node_features=50, hidden=64, history_len=7, num_actions=27, num_partition=None, device=torch.device('cuda:0' if torch.cuda.is_available() else 'cpu'), actor_path=None, critic_path=None, use_multi_gpu=False):
+    def __init__(self, envs, num_policy=6, num_node_features=50, hidden=64, history_len=7, num_actions=27, num_partition=None, device=torch.device('cuda:0' if torch.cuda.is_available() else 'cpu'), actor_path=None, critic_path=None, use_multi_gpu=False, model='GNN'):
         super().__init__()
 
-        # self.critic = GAT(
-        #     num_node_features, 
-        #     hidden, 
-        #     num_actions=num_actions, 
-        #     out_dim=1, 
-        #     std=1.0, 
-        #     history_len=history_len, 
-        #     num_partition=num_partition
-        # )
-        # self.actor = GAT(
-        #     num_node_features, 
-        #     hidden, 
-        #     num_actions=num_actions, 
-        #     out_dim=num_actions, 
-        #     std=0.01, 
-        #     history_len=history_len, 
-        #     num_partition=num_partition
-        # )
         self.critic = PolicyEnsemble(
             num_models=num_policy, 
             num_node_features=num_node_features, 
@@ -345,7 +381,8 @@ class Agent(nn.Module):
             std=1.0, 
             history_len=history_len, 
             num_partition=num_partition, 
-            device=device
+            device=device,
+            model=model
         )
         self.actor = PolicyEnsemble(
             num_models=num_policy, 
@@ -356,17 +393,14 @@ class Agent(nn.Module):
             std=0.01, 
             history_len=history_len, 
             num_partition=num_partition, 
-            device=device
+            device=device,
+            model=model
         )
         
         if critic_path is not None:
             self.critic.load_state_dict(torch.load(critic_path))
         if actor_path is not None:
             self.actor.load_state_dict(torch.load(actor_path))
-
-        # if use_multi_gpu:
-        #     self.critic = torch.nn.DataParallel(self.critic)
-        #     self.actor = torch.nn.DataParallel(self.actor)
 
         self.device = device
 
@@ -435,77 +469,6 @@ def get_partition(data, k=20, labels=None):
         exit()
 
 
-def mytrain(agent, args, actual_batch_size, b_obs, b_logprobs, b_actions, b_values, b_advantages, b_returns, b_inds, num_partition, partition, clipfracs, run_name, optimizer):
-
-    for epoch in range(args.update_epochs):
-        np.random.shuffle(b_inds)
-        for start in range(0, actual_batch_size, args.minibatch_size):
-            end = start + args.minibatch_size
-            mb_inds = b_inds[start:end]
-
-            b_obs_i = [b_obs[i] for i in mb_inds]
-            b_actions_i = b_actions.long()[mb_inds]
-
-            _, newlogprob, entropy, newvalue = agent.get_action_and_value(b_obs_i, b_actions_i, partition=partition, inference=False)
-            # print("newlogprob: {}, b_logprobs[mb_inds]: {}, mb_inds: {}".format(newlogprob, b_logprobs[mb_inds], mb_inds))
-            with open("./runs/{}/println.txt".format(run_name), 'a') as f:
-                print("Rank {}: newlogprob: {}, b_logprobs[mb_inds]: {}, mb_inds: {}".format(mp.current_process().name, newlogprob, b_logprobs[mb_inds], mb_inds), file=f)
-            logratio = newlogprob - b_logprobs[mb_inds]
-            ratio = logratio.exp()
-            # print("logratio: ", logratio)
-            with open("./runs/{}/println.txt".format(run_name), 'a') as f:
-                print("Rank {}: logratio: {}".format(mp.current_process().name, logratio), file=f)
-            
-            with torch.no_grad():
-                # calculate approx_kl http://joschu.net/blog/kl-approx.html
-                old_approx_kl = (-logratio).mean(dim=0)
-                approx_kl = ((ratio - 1) - logratio).mean(dim=0)
-                clipfracs += [((ratio - 1.0).abs() > args.clip_coef).float().mean(dim=0).detach().cpu().numpy()]
-
-            mb_advantages = b_advantages[mb_inds]
-            # print("mb_advantages: ", mb_advantages)
-            with open("./runs/{}/println.txt".format(run_name), 'a') as f:
-                print("Rank {}: mb_advantages: {}".format(mp.current_process().name, mb_advantages), file=f)
-            if args.norm_adv:
-                mb_advantages = (mb_advantages - mb_advantages.mean(dim=0)) / (mb_advantages.std(dim=0) + 1e-8)
-            # print("mb_advantages, ratio: ", mb_advantages, ratio)
-            with open("./runs/{}/println.txt".format(run_name), 'a') as f:
-                print("Rank {}: mb_advantages: {}, ratio: {}".format(mp.current_process().name, mb_advantages, ratio), file=f)
-            # Policy loss
-            pg_loss1 = -mb_advantages * ratio
-            pg_loss2 = -mb_advantages * torch.clamp(ratio, 1 - args.clip_coef, 1 + args.clip_coef)
-            pg_loss = torch.max(pg_loss1, pg_loss2).mean(dim=0)
-
-            # Value loss
-            newvalue = newvalue.view(-1, num_partition)
-            if args.clip_vloss:
-                v_loss_unclipped = (newvalue - b_returns[mb_inds]) ** 2
-                v_clipped = b_values[mb_inds] + torch.clamp(
-                    newvalue - b_values[mb_inds],
-                    -args.clip_coef,
-                    args.clip_coef,
-                )
-                v_loss_clipped = (v_clipped - b_returns[mb_inds]) ** 2
-                v_loss_max = torch.max(v_loss_unclipped, v_loss_clipped)
-                v_loss = 0.5 * v_loss_max.mean(dim=0)
-            else:
-                v_loss = 0.5 * ((newvalue - b_returns[mb_inds]) ** 2).mean(dim=0)
-
-            entropy_loss = entropy.mean(dim=0)
-            # print("sub-loss shapes", pg_loss.shape, entropy_loss.shape, v_loss.shape) # (20,) (20,) (20,)
-            loss = pg_loss - args.ent_coef * entropy_loss + args.vf_coef * v_loss
-            print("Rank {}: loss: ", loss, pg_loss, entropy_loss, v_loss)
-            with open("./runs/{}/println.txt".format(run_name), 'a') as f:
-                print("Rank {}: loss: ", loss, pg_loss, entropy_loss, v_loss, file=f)
-            optimizer.zero_grad()
-            loss.mean().backward()
-            nn.utils.clip_grad_norm_(agent.parameters(), args.max_grad_norm)
-            optimizer.step()
-
-        if args.target_kl is not None and approx_kl > args.target_kl:
-            break
-
-
 # @profile
 def main():
     args = tyro.cli(Args)
@@ -513,7 +476,8 @@ def main():
     args.minibatch_size = int(args.batch_size // args.num_minibatches)      # 32 // 8 = 4           8 // 4 = 2
     args.num_iterations = args.total_timesteps // args.batch_size           # [3200/32]=100         [1600/8]=200
     
-    print(args.num_iterations, args.minibatch_size, args.num_steps)
+    print("num_iterations: {}, minibatch_size: {}, num_steps: {}".format(
+        args.num_iterations, args.minibatch_size, args.num_steps))
 
     if args.jianhong_advice==True:
         args.norm_adv = False
@@ -583,16 +547,21 @@ def main():
     np.save("./runs/{}/data_online_1k.npy".format(run_name), data)
     np.save("./runs/{}/labels_online_1k.npy".format(run_name), labels)
 
-    num_partition = len(np.unique(labels))
-    if args.dataset=='simulation':
-        partition = get_partition(data, k=num_partition, labels=None).to(device)           # (data.shape[0], ) -- each entry is a cluster
-    elif args.dataset=='sc-trans':
-        partition = torch.from_numpy(labels).to(device)
-    elif args.dataset=='mnist':
-        partition = get_partition(data, k=num_partition, labels=None).to(device)
+    # partition-based control
+    if args.num_partition == 1:
+        num_partition = 1
+        partition = torch.zeros(data.shape[0]).to(device)
     else:
-        print("wrong dataset!")
-        exit()
+        num_partition = len(np.unique(labels))
+        if args.dataset=='simulation':
+            partition = get_partition(data, k=num_partition, labels=None).to(device)           # (data.shape[0], ) -- each entry is a cluster
+        elif args.dataset=='sc-trans':
+            partition = torch.from_numpy(labels).to(device)
+        elif args.dataset=='mnist':
+            partition = get_partition(data, k=num_partition, labels=None).to(device)
+        else:
+            print("wrong dataset!")
+            exit()
 
     # 2. MNIST
     # transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))])
@@ -633,7 +602,8 @@ def main():
         num_actions=27, 
         num_partition=num_partition, 
         use_multi_gpu=use_multi_gpu, 
-        device=device
+        device=device,
+        model=args.policy_model
     ).to(device)
     if args.agent_path != "":
         agent.load_state_dict(torch.load(args.agent_path))
@@ -690,7 +660,9 @@ def main():
                 # handle accident or illegal situation
                 while True:
                     action, logprob, _, value = agent.get_action_and_value(next_obs, partition=partition, inference=True)
+                    print("action: ", action)
                     hp = envs.combinations[action.detach().cpu() % len(envs.combinations)]
+                    hp = hp.reshape(-1,3)
                     alpha, beta, gamma = hp[:, 0], hp[:, 1], hp[:, 2]
 
                     alpha = {k:alpha[k] for k in range(len(alpha))}
@@ -702,9 +674,13 @@ def main():
                     gamma = {k:alpha[k] for k in range(len(gamma))}
                     gamma = [gamma[i.item()] for i in partition]
 
+                    print(alpha[0], beta[0], gamma[0])
+
                     n_neighbors = np.round(alpha * envs.current_state["n_neighbors"]).astype(np.int32)
                     MN_ratio = beta * envs.current_state["MN_ratio"]
                     FP_ratio = gamma * envs.current_state["FP_ratio"]
+
+                    print("n, MN, FP: ", n_neighbors[0], MN_ratio[0], FP_ratio[0])
 
                     if args.cuda:
                         torch.cuda.empty_cache()
@@ -753,6 +729,12 @@ def main():
                     writer.add_scalar("charts/episodic_return", infos["episode"]["r"], global_step)
                     writer.add_scalar("charts/episodic_length", infos["episode"]["l"], global_step)
 
+            with open("./runs/{}/println.txt".format(run_name), 'a') as f:
+                    print("iter{}_step{}\tcurrent:{}\tbest:{}\tr1:{}\tr2:{}\tr:{}".format(
+                        iteration, step, envs.features, envs.best_feats, envs.r1, envs.r2, reward), file=f)
+            print("iter{}_step{}\tcurrent:{}\taction:{}\tbest:{}\tr1:{}\tr2:{}\tr:{}".format(
+                        iteration, step, envs.features, envs.best_feats, action, envs.r1, envs.r2, reward))
+
         if args.cuda:
             torch.cuda.empty_cache()
         gc.collect()
@@ -790,7 +772,7 @@ def main():
             if min(envs.history_mse[-actual_num_steps:]) < envs.best_mse:
                 torch.save(agent.state_dict(), "./runs/{}/best_mse_agent.pt".format(run_name))
                 envs.best_mse = min(envs.history_mse[-actual_num_steps:])
-        elif args.reward_func == 'human-dm':
+        elif args.reward_func == 'human-dm' or args.reward_func == 'human-dm-surrogate':
             # save agent with BEST episodic accumulative rewards
             if sum(envs.history_rewards[-actual_num_steps:]) > envs.best_reward:
                 torch.save(agent.state_dict(), "./runs/{}/best_rewards_agent.pt".format(run_name))
@@ -827,112 +809,74 @@ def main():
         # Optimizing the policy and value network
         b_inds = np.arange(actual_batch_size)
         clipfracs = []
-
-        if torch.cuda.is_available()==True:
             
-            for epoch in range(args.update_epochs):
-                np.random.shuffle(b_inds)
-                for start in range(0, actual_batch_size, args.minibatch_size):
-                    end = start + args.minibatch_size
-                    mb_inds = b_inds[start:end]
+        for epoch in range(args.update_epochs):
+            np.random.shuffle(b_inds)
+            for start in range(0, actual_batch_size, args.minibatch_size):
+                end = start + args.minibatch_size
+                mb_inds = b_inds[start:end]
 
-                    b_obs_i = [b_obs[i] for i in mb_inds]
-                    b_actions_i = b_actions.long()[mb_inds]
+                b_obs_i = [b_obs[i] for i in mb_inds]
+                b_actions_i = b_actions.long()[mb_inds]
 
-                    _, newlogprob, entropy, newvalue = agent.get_action_and_value(b_obs_i, b_actions_i, partition=partition, inference=False)
-                    # print("newlogprob: {}, b_logprobs[mb_inds]: {}, mb_inds: {}".format(newlogprob, b_logprobs[mb_inds], mb_inds))
-                    # with open("./runs/{}/println.txt".format(run_name), 'a') as f:
-                    #     print("newlogprob: {}, b_logprobs[mb_inds]: {}, mb_inds: {}".format(newlogprob, b_logprobs[mb_inds], mb_inds), file=f)
-                    logratio = newlogprob - b_logprobs[mb_inds]
-                    ratio = logratio.exp()
-                    # print("logratio: ", logratio)
-                    # with open("./runs/{}/println.txt".format(run_name), 'a') as f:
-                    #     print("logratio: ", logratio, file=f)
-                    
-                    with torch.no_grad():
-                        # calculate approx_kl http://joschu.net/blog/kl-approx.html
-                        old_approx_kl = (-logratio).mean(dim=0)
-                        approx_kl = ((ratio - 1) - logratio).mean(dim=0)
-                        clipfracs += [((ratio - 1.0).abs() > args.clip_coef).float().mean(dim=0).detach().cpu().numpy()]
-
-                    mb_advantages = b_advantages[mb_inds]
-                    # print("mb_advantages: ", mb_advantages)
-                    # with open("./runs/{}/println.txt".format(run_name), 'a') as f:
-                    #     print("mb_advantages: ", mb_advantages, file=f)
-                    if args.norm_adv:
-                        mb_advantages = (mb_advantages - mb_advantages.mean(dim=0)) / (mb_advantages.std(dim=0) + 1e-8)
-                    # print("mb_advantages, ratio: ", mb_advantages, ratio)
-                    # with open("./runs/{}/println.txt".format(run_name), 'a') as f:
-                    #     print("mb_advantages, ratio: ", mb_advantages, ratio, file=f)
-                    # Policy loss
-                    pg_loss1 = -mb_advantages * ratio
-                    pg_loss2 = -mb_advantages * torch.clamp(ratio, 1 - args.clip_coef, 1 + args.clip_coef)
-                    pg_loss = torch.max(pg_loss1, pg_loss2).mean(dim=0)
-
-                    # Value loss
-                    newvalue = newvalue.view(-1, num_partition)
-                    if args.clip_vloss:
-                        v_loss_unclipped = (newvalue - b_returns[mb_inds]) ** 2
-                        v_clipped = b_values[mb_inds] + torch.clamp(
-                            newvalue - b_values[mb_inds],
-                            -args.clip_coef,
-                            args.clip_coef,
-                        )
-                        v_loss_clipped = (v_clipped - b_returns[mb_inds]) ** 2
-                        v_loss_max = torch.max(v_loss_unclipped, v_loss_clipped)
-                        v_loss = 0.5 * v_loss_max.mean(dim=0)
-                    else:
-                        v_loss = 0.5 * ((newvalue - b_returns[mb_inds]) ** 2).mean(dim=0)
-
-                    entropy_loss = entropy.mean(dim=0)
-                    # print("sub-loss shapes", pg_loss.shape, entropy_loss.shape, v_loss.shape) # (20,) (20,) (20,)
-                    loss = pg_loss - args.ent_coef * entropy_loss + args.vf_coef * v_loss
-                    print("loss: ", loss, pg_loss, entropy_loss, v_loss)
-                    # with open("./runs/{}/println.txt".format(run_name), 'a') as f:
-                    #     print("loss: ", loss, pg_loss, entropy_loss, v_loss, file=f)
-                    optimizer.zero_grad()
-                    loss.mean().backward()
-                    nn.utils.clip_grad_norm_(agent.parameters(), args.max_grad_norm)
-                    optimizer.step()
-
-                if args.target_kl is not None and approx_kl > args.target_kl:
-                    break
-        else:
-            agent.critic.share_memory() 
-            agent.actor.share_memory()
-  
-            # Create a list of processes and start each process with the train function 
-            processes = [] 
-            for rank in range(args.num_processes): 
-                p = mp.Process( 
-                    target=mytrain, 
-                    args=(
-                        agent, 
-                        args, 
-                        actual_batch_size, 
-                        b_obs, 
-                        b_logprobs, 
-                        b_actions, 
-                        b_values, 
-                        b_advantages, 
-                        b_returns, 
-                        b_inds, 
-                        num_partition, 
-                        partition, 
-                        clipfracs, 
-                        run_name, 
-                        optimizer,
-                    ), 
-                    name=f"Process-{rank}"
-                )
-                p.start()
-                processes.append(p)
-                print(f"Started {p.name}") 
+                _, newlogprob, entropy, newvalue = agent.get_action_and_value(b_obs_i, b_actions_i, partition=partition, inference=False)
+                # print("newlogprob: {}, b_logprobs[mb_inds]: {}, mb_inds: {}".format(newlogprob, b_logprobs[mb_inds], mb_inds))
+                # with open("./runs/{}/println.txt".format(run_name), 'a') as f:
+                #     print("newlogprob: {}, b_logprobs[mb_inds]: {}, mb_inds: {}".format(newlogprob, b_logprobs[mb_inds], mb_inds), file=f)
+                logratio = newlogprob - b_logprobs[mb_inds]
+                ratio = logratio.exp()
+                # print("logratio: ", logratio)
+                # with open("./runs/{}/println.txt".format(run_name), 'a') as f:
+                #     print("logratio: ", logratio, file=f)
                 
-            # Wait for all processes to finish
-            for p in processes:
-                p.join()
-                print(f"Finished {p.name}")
+                with torch.no_grad():
+                    # calculate approx_kl http://joschu.net/blog/kl-approx.html
+                    old_approx_kl = (-logratio).mean(dim=0)
+                    approx_kl = ((ratio - 1) - logratio).mean(dim=0)
+                    clipfracs += [((ratio - 1.0).abs() > args.clip_coef).float().mean(dim=0).detach().cpu().numpy()]
+
+                mb_advantages = b_advantages[mb_inds]
+                # print("mb_advantages: ", mb_advantages)
+                # with open("./runs/{}/println.txt".format(run_name), 'a') as f:
+                #     print("mb_advantages: ", mb_advantages, file=f)
+                if args.norm_adv:
+                    mb_advantages = (mb_advantages - mb_advantages.mean(dim=0)) / (mb_advantages.std(dim=0) + 1e-8)
+                # print("mb_advantages, ratio: ", mb_advantages, ratio)
+                # with open("./runs/{}/println.txt".format(run_name), 'a') as f:
+                #     print("mb_advantages, ratio: ", mb_advantages, ratio, file=f)
+                # Policy loss
+                pg_loss1 = -mb_advantages * ratio
+                pg_loss2 = -mb_advantages * torch.clamp(ratio, 1 - args.clip_coef, 1 + args.clip_coef)
+                pg_loss = torch.max(pg_loss1, pg_loss2).mean(dim=0)
+
+                # Value loss
+                newvalue = newvalue.view(-1, num_partition)
+                if args.clip_vloss:
+                    v_loss_unclipped = (newvalue - b_returns[mb_inds]) ** 2
+                    v_clipped = b_values[mb_inds] + torch.clamp(
+                        newvalue - b_values[mb_inds],
+                        -args.clip_coef,
+                        args.clip_coef,
+                    )
+                    v_loss_clipped = (v_clipped - b_returns[mb_inds]) ** 2
+                    v_loss_max = torch.max(v_loss_unclipped, v_loss_clipped)
+                    v_loss = 0.5 * v_loss_max.mean(dim=0)
+                else:
+                    v_loss = 0.5 * ((newvalue - b_returns[mb_inds]) ** 2).mean(dim=0)
+
+                entropy_loss = entropy.mean(dim=0)
+                # print("sub-loss shapes", pg_loss.shape, entropy_loss.shape, v_loss.shape) # (20,) (20,) (20,)
+                loss = pg_loss - args.ent_coef * entropy_loss + args.vf_coef * v_loss
+                print("loss: ", loss, pg_loss, entropy_loss, v_loss)
+                # with open("./runs/{}/println.txt".format(run_name), 'a') as f:
+                #     print("loss: ", loss, pg_loss, entropy_loss, v_loss, file=f)
+                optimizer.zero_grad()
+                loss.mean().backward()
+                nn.utils.clip_grad_norm_(agent.parameters(), args.max_grad_norm)
+                optimizer.step()
+
+            if args.target_kl is not None and approx_kl > args.target_kl:
+                break
 
         y_pred, y_true = b_values.detach().cpu().numpy(), b_returns.detach().cpu().numpy()
         var_y = np.var(y_true)

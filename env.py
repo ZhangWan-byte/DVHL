@@ -28,6 +28,8 @@ from sklearn.metrics import mean_squared_error
 
 from compute_feature import generate_features
 
+from surrogate.collaboration_with_ting_zhang.network_repo import MLP_forward_embed
+
 # from memory_profiler import profile
 
 def get_tree(data):
@@ -159,6 +161,12 @@ class DREnv(Env):
 
             self.best_reward = 0.0
 
+        elif reward_func == 'human-dm-surrogate':
+            self.best_feats = torch.tensor([10, 1.0, 5.0]).float()
+            self.last_feats = torch.tensor([10, 1.0, 5.0]).float()
+
+            self.best_reward = 0.0
+
         else:
             pass
 
@@ -212,7 +220,9 @@ class DREnv(Env):
         """
         if initial==True:
 
-            n_neighbors = np.round(np.ones(x.shape[0]) * self.num_partition).astype(np.int32) #None
+            # n_neighbors = np.round(np.ones(x.shape[0]) * self.num_partition).astype(np.int32) #None
+            # n_neighbors = np.round(np.ones(x.shape[0] * 10)).astype(np.int32)
+            n_neighbors = None
             if self.dataset=='simulation':
                 MN_ratio = np.ones(x.shape[0]) * 1.0 #0.5 #2.0 # 0.5
                 FP_ratio = np.ones(x.shape[0]) * 5.0 #1.0 #20.0 # 2.0
@@ -236,45 +246,59 @@ class DREnv(Env):
         n_MN = np.round(n_neighbors * MN_ratio).astype(np.int32)
         n_FP = np.round(n_neighbors * FP_ratio).astype(np.int32)
 
-        # generate kNN neighbors, mid-pairs, negatives
-        pair_neighbors, pair_MN, pair_FP, tree = generate_pair(
-            x, n_neighbors, n_MN, n_FP, distance='euclidean', verbose=False
-        )
 
-        # add virtual node
-        x = np.vstack([x, np.mean(x, axis=0)])
-        
-        # edge index
-        pair_VN = np.array([(i, num_nodes) for i in range(num_nodes)] + [(num_nodes, i) for i in range(num_nodes)])
-        edge_index = np.vstack([pair_neighbors, pair_MN, pair_FP, pair_VN])
+        if self.reward_func != 'human-dm-surrogate':
+            # generate kNN neighbors, mid-pairs, negatives
+            pair_neighbors, pair_MN, pair_FP, tree = generate_pair(
+                x, n_neighbors, n_MN, n_FP, distance='euclidean', verbose=False
+            )
 
-        # edge feats
-        edge_attr = np.zeros((edge_index.shape[0], 4))
-        edge_attr[:pair_neighbors.shape[0], 0] = 1                                                      # knn
-        edge_attr[pair_neighbors.shape[0]:pair_neighbors.shape[0]+pair_MN.shape[0], 1] = 1              # mid-pair
-        edge_attr[pair_neighbors.shape[0]+pair_MN.shape[0]:pair_neighbors.shape[0]+pair_MN.shape[0]+pair_FP.shape[0], 2] = 1    # FP
-        edge_attr[pair_neighbors.shape[0]+pair_MN.shape[0]+pair_FP.shape[0]:, 3] = 1                    # VN
+            # add virtual node
+            x = np.vstack([x, np.mean(x, axis=0)])
+            
+            # edge index
+            pair_VN = np.array([(i, num_nodes) for i in range(num_nodes)] + [(num_nodes, i) for i in range(num_nodes)])
+            edge_index = np.vstack([pair_neighbors, pair_MN, pair_FP, pair_VN])
 
-        edge_index = edge_index.transpose()
-        edge_index = edge_index[[1, 0]]         # message: src -> tgt
+            # edge feats
+            edge_attr = np.zeros((edge_index.shape[0], 4))
+            edge_attr[:pair_neighbors.shape[0], 0] = 1                                                      # knn
+            edge_attr[pair_neighbors.shape[0]:pair_neighbors.shape[0]+pair_MN.shape[0], 1] = 1              # mid-pair
+            edge_attr[pair_neighbors.shape[0]+pair_MN.shape[0]:pair_neighbors.shape[0]+pair_MN.shape[0]+pair_FP.shape[0], 2] = 1    # FP
+            edge_attr[pair_neighbors.shape[0]+pair_MN.shape[0]+pair_FP.shape[0]:, 3] = 1                    # VN
 
-        # generate state
-        state = {
-            "x": torch.from_numpy(x).to(self.device), 
-            "label": torch.from_numpy(label).to(self.device), 
-            "edge_index": torch.from_numpy(edge_index).long().to(self.device), 
-            "edge_attr": torch.from_numpy(edge_attr).to(self.device), 
- 
-            "history": [i.to(self.device) for i in self.history], 
+            edge_index = edge_index.transpose()
+            edge_index = edge_index[[1, 0]]         # message: src -> tgt
 
-            "n_neighbors": n_neighbors, 
-            "MN_ratio": MN_ratio, 
-            "FP_ratio": FP_ratio, 
+            # generate state
+            state = {
+                "x": torch.from_numpy(x).to(self.device), 
+                "label": torch.from_numpy(label).to(self.device), 
+                "edge_index": torch.from_numpy(edge_index).long().to(self.device), 
+                "edge_attr": torch.from_numpy(edge_attr).to(self.device), 
+    
+                "history": [i.to(self.device) for i in self.history], 
 
-            "pair_neighbors": pair_neighbors,
-            "pair_MN": pair_MN, 
-            "pair_FP": pair_FP
-        }
+                "n_neighbors": n_neighbors, 
+                "MN_ratio": MN_ratio, 
+                "FP_ratio": FP_ratio, 
+
+                "pair_neighbors": pair_neighbors,
+                "pair_MN": pair_MN, 
+                "pair_FP": pair_FP
+            }
+
+        else:
+
+            state = {
+                "x": torch.from_numpy(x).to(self.device), 
+                "label": torch.from_numpy(label).to(self.device),
+                "history": [i.to(self.device) for i in self.history], 
+
+                "n_neighbors": n_neighbors, 
+                "MN_ratio": MN_ratio, 
+                "FP_ratio": FP_ratio, 
+            }
 
         return state
 
@@ -330,42 +354,45 @@ class DREnv(Env):
         return length
 
     def obtain_reward(self, state):
+        
         with torch.no_grad():
 
-            self.reducer = myPaCMAP(
-                n_components=2, 
-                n_neighbors=state["n_neighbors"], 
-                MN_ratio=state["MN_ratio"], 
-                FP_ratio=state["FP_ratio"], 
-                pair_neighbors=state["pair_neighbors"], 
-                pair_MN=state["pair_MN"], 
-                pair_FP=state["pair_FP"]
-            )
-
             name = "iter{}_step{}".format(self.iteration, self.step)
-            # print("\n\n{} fit-transforming...".format(name))
-            # with open("./runs/{}/println.txt".format(self.run_name), 'a') as f:
-            #     print("\n\n{} fit-transforming...".format(name), file=f)
 
-            t1 = time.time()
-            z0 = self.reducer.fit_transform(
-                self.x, 
-                n_neighbors=state["n_neighbors"], 
-                n_MN=np.round(state["MN_ratio"] * state["n_neighbors"]).astype(np.int32), 
-                n_FP=np.round(state["FP_ratio"] * state["n_neighbors"]).astype(np.int32)
-            )
-            t2 = time.time()
+            if self.reward_func != 'human-dm-surrogate':
+                self.reducer = myPaCMAP(
+                    n_components=2, 
+                    n_neighbors=state["n_neighbors"], 
+                    MN_ratio=state["MN_ratio"], 
+                    FP_ratio=state["FP_ratio"], 
+                    pair_neighbors=state["pair_neighbors"], 
+                    pair_MN=state["pair_MN"], 
+                    pair_FP=state["pair_FP"]
+                )
 
-            if self.verbose:
-                print("time used for fit-transform: {} s".format(t2-t1))
-                with open("./runs/{}/println.txt".format(self.run_name), 'a') as f:
-                    print("time used for fit-transform: {} s".format(t2-t1), file=f)
+                # print("\n\n{} fit-transforming...".format(name))
+                # with open("./runs/{}/println.txt".format(self.run_name), 'a') as f:
+                #     print("\n\n{} fit-transforming...".format(name), file=f)
 
-            if self.draw:
-                torch.save(torch.from_numpy(z0), os.path.join(self.save_path, "z_{}.pt".format(name)))
-                print("z saved to: {}".format(os.path.join(self.save_path, "z_{}.pt".format(name))))
-                with open("./runs/{}/println.txt".format(self.run_name), 'a') as f:
-                    print("z saved to: {}".format(os.path.join(self.save_path, "z_{}.pt".format(name))), file=f)
+                t1 = time.time()
+                z0 = self.reducer.fit_transform(
+                    self.x, 
+                    n_neighbors=state["n_neighbors"], 
+                    n_MN=np.round(state["MN_ratio"] * state["n_neighbors"]).astype(np.int32), 
+                    n_FP=np.round(state["FP_ratio"] * state["n_neighbors"]).astype(np.int32)
+                )
+                t2 = time.time()
+
+                if self.verbose:
+                    print("time used for fit-transform: {} s".format(t2-t1))
+                    with open("./runs/{}/println.txt".format(self.run_name), 'a') as f:
+                        print("time used for fit-transform: {} s".format(t2-t1), file=f)
+
+                if self.draw:
+                    torch.save(torch.from_numpy(z0), os.path.join(self.save_path, "z_{}.pt".format(name)))
+                    print("z saved to: {}".format(os.path.join(self.save_path, "z_{}.pt".format(name))))
+                    with open("./runs/{}/println.txt".format(self.run_name), 'a') as f:
+                        print("z saved to: {}".format(os.path.join(self.save_path, "z_{}.pt".format(name))), file=f)
             
             # get reward
             if self.reward_func == 'human-vis':
@@ -533,6 +560,34 @@ class DREnv(Env):
                     self.best_name = name
 
                 reward_info = " reward: {:.4f}+{:.4f}".format(r1, r2)
+
+            elif self.reward_func == 'human-dm-surrogate':
+
+                # ruiyuan_MLP as surrogate
+
+                self.features = torch.tensor([
+                    state["n_neighbors"][0], 
+                    state["MN_ratio"][0], 
+                    state["FP_ratio"][0]]).to(self.device)
+
+                self.feat1 = torch.hstack([self.features, self.last_feats]).view(1,-1).float().to(self.device)
+                self.feat2 = torch.hstack([self.features, self.best_feats]).view(1,-1).float().to(self.device)
+
+                self.r1 = self.surrogate(self.feat1).detach().cpu().item()
+
+                self.r2 = self.surrogate(self.feat2).detach().cpu().item()
+
+                r = self.r1 + self.r2
+
+                # update last
+                self.last_feats = self.features
+
+                # update best
+                if self.r2>0.5:
+                    self.best_feats = self.features
+                    self.best_name = name
+
+                reward_info = " reward: {:.4f}+{:.4f}".format(self.r1, self.r2)
                 
             elif self.reward_func == 'real-human':
                 if self.draw:
@@ -567,7 +622,7 @@ class DREnv(Env):
                 exit()
 
             # update history r1
-            self.history_r1 = torch.hstack([self.history_r1, torch.tensor(r1).to(self.device)])
+            self.history_r1 = torch.hstack([self.history_r1, torch.tensor(self.r1).to(self.device)])
 
             if self.draw:
 
@@ -620,6 +675,7 @@ class DREnv(Env):
         
         # 1. obtain n_neighbors / MN_ratio / FP_ratio
         hp = self.combinations[action.detach().cpu() % len(self.combinations)]
+        hp = hp.reshape(-1,3)
         alpha, beta, gamma = hp[:, 0], hp[:, 1], hp[:, 2]       # (20,), (20,), (20,)
         # print("alpha: ", alpha)
         # print("beta: ", beta)
@@ -693,21 +749,23 @@ class DREnv(Env):
         self.step = 0
 
         self.current_state = self.obtain_state(self.x, self.label, initial=True) # self.start
-        self.reducer = myPaCMAP(
-            n_components=2, 
-            n_neighbors=self.current_state["n_neighbors"], 
-            MN_ratio=self.current_state["MN_ratio"], 
-            FP_ratio=self.current_state["FP_ratio"], 
-            pair_neighbors=self.current_state["pair_neighbors"], 
-            pair_MN=self.current_state["pair_MN"], 
-            pair_FP=self.current_state["pair_FP"]
-        )
-        z0 = self.reducer.fit_transform(
-            self.x, 
-            n_neighbors=self.current_state["n_neighbors"], 
-            n_MN=np.round(self.current_state["MN_ratio"] * self.current_state["n_neighbors"]).astype(np.int32), 
-            n_FP=np.round(self.current_state["FP_ratio"] * self.current_state["n_neighbors"]).astype(np.int32)
-        )
+
+        if self.reward_func != 'human-dm-surrogate':
+            self.reducer = myPaCMAP(
+                n_components=2, 
+                n_neighbors=self.current_state["n_neighbors"], 
+                MN_ratio=self.current_state["MN_ratio"], 
+                FP_ratio=self.current_state["FP_ratio"], 
+                pair_neighbors=self.current_state["pair_neighbors"], 
+                pair_MN=self.current_state["pair_MN"], 
+                pair_FP=self.current_state["pair_FP"]
+            )
+            z0 = self.reducer.fit_transform(
+                self.x, 
+                n_neighbors=self.current_state["n_neighbors"], 
+                n_MN=np.round(self.current_state["MN_ratio"] * self.current_state["n_neighbors"]).astype(np.int32), 
+                n_FP=np.round(self.current_state["FP_ratio"] * self.current_state["n_neighbors"]).astype(np.int32)
+            )
 
         if self.reward_func == 'human-vis':
             z = get_Ihat(normalise(z0), size=self.size)
@@ -802,6 +860,27 @@ class DREnv(Env):
             else:
                 print("wrong dataset")
                 exit()
+
+        elif self.reward_func == 'human-dm-surrogate':
+
+            # load surrogate model
+            layers = [128,64,32,16,1]
+            
+            self.surrogate = MLP_forward_embed(
+                layers,
+                embedding_dim=int(128/2),
+                input_dim=6
+            ).to(self.device)
+
+            self.surrogate.load_state_dict(
+                torch.load(
+                    "./surrogate/collaboration_with_ting_zhang/result/mlp_2in_embed_128_sim_ruiyuan.pth"
+                )
+            )
+
+            # best/last feats
+            self.best_feats = torch.tensor([10, 1.0, 5.0]).float().to(self.device)
+            self.last_feats = torch.tensor([10, 1.0, 5.0]).float().to(self.device)
 
         elif self.reward_func == 'real-human':
             self.best_id = -1
