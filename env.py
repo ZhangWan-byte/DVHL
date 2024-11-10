@@ -125,6 +125,15 @@ class DREnv(Env):
 
         self.num_partition = num_partition
 
+        # surrogate ensemble models
+        self.models = self.load_models(
+            mlp_path="surrogate/collaboration_with_ting_zhang/result/20241110_mlp_sim_0.4.pth",
+            rf_path="surrogate/collaboration_with_ting_zhang/result/rf_0.4.pkl",
+            fusion_path="surrogate/collaboration_with_ting_zhang/result/fusion_0.4.pkl"
+        )
+        self.data_maxmin = np.load("surrogate/collaboration_with_ting_zhang/result/sim_training_data_maxmin0.4.npy")
+        self.label_maxmin = np.load("surrogate/collaboration_with_ting_zhang/result/sim_training_label_maxmin0.4.npy")
+
         # objective surrogate
         self.reward_func = reward_func
         
@@ -162,6 +171,12 @@ class DREnv(Env):
             self.best_reward = 0.0
 
         elif reward_func == 'human-dm-surrogate':
+            self.best_feats = torch.tensor([10, 1.0, 5.0]).float()
+            self.last_feats = torch.tensor([10, 1.0, 5.0]).float()
+
+            self.best_reward = 0.0
+
+        elif reward_func == 'ground-truth':
             self.best_feats = torch.tensor([10, 1.0, 5.0]).float()
             self.last_feats = torch.tensor([10, 1.0, 5.0]).float()
 
@@ -359,7 +374,7 @@ class DREnv(Env):
 
             name = "iter{}_step{}".format(self.iteration, self.step)
 
-            if self.reward_func != 'human-dm-surrogate':
+            if self.reward_func not in ['human-dm-surrogate', 'ground-truth']:
                 self.reducer = myPaCMAP(
                     n_components=2, 
                     n_neighbors=state["n_neighbors"], 
@@ -563,19 +578,64 @@ class DREnv(Env):
 
             elif self.reward_func == 'human-dm-surrogate':
 
-                # ruiyuan_MLP as surrogate
+                # 1. ruiyuan_MLP as surrogate
+
+                # self.features = torch.tensor([
+                #     state["n_neighbors"][0], 
+                #     state["MN_ratio"][0], 
+                #     state["FP_ratio"][0]]).to(self.device)
+
+                # self.feat1 = torch.hstack([self.features, self.last_feats]).view(1,-1).float().to(self.device)
+                # self.feat2 = torch.hstack([self.features, self.best_feats]).view(1,-1).float().to(self.device)
+
+                # self.r1 = self.surrogate(self.feat1).detach().cpu().item()
+                # self.r2 = self.surrogate(self.feat2).detach().cpu().item()
+
+                # 2. Ensemble as surrogate
 
                 self.features = torch.tensor([
-                    state["n_neighbors"][0], 
-                    state["MN_ratio"][0], 
-                    state["FP_ratio"][0]]).to(self.device)
-
+                    state["n_neighbors"][0],
+                    state["MN_ratio"][0],
+                    state["FP_ratio"][0]
+                ]).to(self.device)
+                
                 self.feat1 = torch.hstack([self.features, self.last_feats]).view(1,-1).float().to(self.device)
                 self.feat2 = torch.hstack([self.features, self.best_feats]).view(1,-1).float().to(self.device)
 
-                self.r1 = self.surrogate(self.feat1).detach().cpu().item()
+                self.r1 = self.surrogate_inference(
+                    self.models, self.feat1, self.data_maxmin, self.label_maxmin).item()
+                self.r2 = self.surrogate_inference(
+                    self.models, self.feat2, self.data_maxmin, self.label_maxmin).item()
 
-                self.r2 = self.surrogate(self.feat2).detach().cpu().item()
+                r = self.r1 + self.r2
+
+                # update last
+                self.last_feats = self.features
+
+                # update best
+                if self.r2>0.5:
+                    self.best_feats = self.features
+                    self.best_name = name
+
+                reward_info = " reward: {:.4f}+{:.4f}".format(self.r1, self.r2)
+
+            elif self.reward_func == 'ground-truth':
+
+                self.features = torch.tensor([
+                    state["n_neighbors"][0],
+                    state["MN_ratio"][0],
+                    state["FP_ratio"][0]
+                ]).to(self.device)
+
+                self.r1 = (self.features[0] - self.last_feats[0]) / self.last_feats[0] + \
+                    (self.features[1] - self.last_feats[1]) / self.last_feats[1] - \
+                    (self.features[2] - self.last_feats[2]) / self.last_feats[2]
+                self.r2 = (self.features[0] - self.last_feats[0]) / self.last_feats[0] + \
+                    (self.features[1] - self.last_feats[1]) / self.last_feats[1] - \
+                    (self.features[2] - self.last_feats[2]) / self.last_feats[2]
+
+                self.r1 = self.r1.detach().cpu().item()
+                self.r2 = self.r2.detach().cpu().item()
 
                 r = self.r1 + self.r2
 
@@ -750,7 +810,7 @@ class DREnv(Env):
 
         self.current_state = self.obtain_state(self.x, self.label, initial=True) # self.start
 
-        if self.reward_func != 'human-dm-surrogate':
+        if self.reward_func not in ['human-dm-surrogate', 'ground-truth']:
             self.reducer = myPaCMAP(
                 n_components=2, 
                 n_neighbors=self.current_state["n_neighbors"], 
@@ -861,7 +921,7 @@ class DREnv(Env):
                 print("wrong dataset")
                 exit()
 
-        elif self.reward_func == 'human-dm-surrogate':
+        elif self.reward_func in ['human-dm-surrogate', 'ground-truth']:
 
             # load surrogate model
             layers = [128,64,32,16,1]
@@ -903,3 +963,110 @@ class DREnv(Env):
             print("img saved to {}".format(os.path.join(self.save_path, "initial")))
 
         return self.current_state
+
+    
+    def surrogate_inference(self, models, data, data_maxmin, label_maxmin):
+        """
+        models: {'mlp': MLP, 'rf': RF, 'fusion': fusion}
+        data: [N, 6], two sets of parameters, original (non-normalised)
+        data_maxmin: [2, 6], first row max, second row min
+        label_maxmin: [2, 1]
+        : return: [N, 1]
+        """
+        N = data.shape[0]
+
+        if type(data) != type(np.ones(1)):
+            data = data.detach().cpu().numpy()
+
+        # get p1
+        with torch.no_grad():
+            models['mlp'].eval()
+
+            data_max, data_min = data_maxmin[0, :], data_maxmin[1, :]
+            label_max, label_min = label_maxmin[0, :], label_maxmin[1, :]
+
+            data_input = (data - data_min) / (data_max - data_min)
+
+            p1 = models['mlp'](torch.from_numpy(data_input).float().cuda())
+            p1 = p1.detach().cpu().numpy() * (label_max - label_min) + label_min
+            p1 = p1.reshape(-1, 1)
+
+        # get p2
+        data_aug = list(map(lambda x:aug_features(x[:3], x[3:], mode=1), data))
+        data_aug = np.array(data_aug).reshape(N, -1)
+        p2 = models['rf'].predict_proba(data_aug)[:, 1]
+        p2 = p2.reshape(-1, 1)
+
+        # get fusion
+        data_fusion = np.hstack([p1, p2])
+        p_fusion = models['fusion'].predict_proba(data_fusion)[:, 1]
+        p_fusion = p_fusion.reshape(-1, 1)
+
+        return p_fusion
+
+    def load_models(self, mlp_path, rf_path, fusion_path):
+
+        mlp = MLP_forward_embed([128,64,32,16,1], embedding_dim=int(128/2), input_dim=6).cuda()
+        mlp.load_state_dict(torch.load(mlp_path))
+        rf = pickle.load(open(rf_path, "rb"))
+        lr = pickle.load(open(fusion_path, "rb"))
+
+        models = {
+            'mlp': mlp,
+            'rf': rf,
+            'fusion': lr
+        }
+        return models
+
+def aug_features(x1, x2, mode=0):
+
+    # only original feats
+    if mode==0:
+        feats = [x1[0], x1[1], x1[2], x2[0], x2[1], x2[2]]
+
+    # original feats + cross feats
+    elif mode==1:
+        feats = [
+            x1[0], x1[1], x1[2], 
+            x2[0], x2[1], x2[2], 
+            x1[0]-x2[0], 
+            x1[1]-x2[1], 
+            x1[2]-x2[2], 
+            x1[0]/x2[0], 
+            x1[1]/x2[1], 
+            x1[2]/x2[2], 
+            x1[0]+x1[0]*x1[1]-x1[0]*x1[2], 
+            x2[0]+x2[0]*x2[1]-x2[0]*x2[2], 
+            (x1[0]+x1[0]*x1[1])/x1[0]*x1[2], 
+            (x2[0]+x2[0]*x2[1])/x2[0]*x2[2], 
+            x1[0]*x1[1], 
+            x2[0]*x2[1], 
+            x1[0]*x1[2], 
+            x2[0]*x2[1]
+        ]
+
+    # only cross feats
+    elif mode==2:
+        feats = [
+            # x1[0], x1[1], x1[2], 
+            # x2[0], x2[1], x2[2], 
+            x1[0]-x2[0], 
+            x1[1]-x2[1], 
+            x1[2]-x2[2], 
+            x1[0]/x2[0], 
+            x1[1]/x2[1], 
+            x1[2]/x2[2], 
+            x1[0]+x1[0]*x1[1]-x1[0]*x1[2], 
+            x2[0]+x2[0]*x2[1]-x2[0]*x2[2], 
+            (x1[0]+x1[0]*x1[1])/x1[0]*x1[2], 
+            (x2[0]+x2[0]*x2[1])/x2[0]*x2[2], 
+            x1[0]*x1[1], 
+            x2[0]*x2[1], 
+            x1[0]*x1[2], 
+            x2[0]*x2[1]
+        ]
+
+    else:
+        print("wrong mode!")
+
+    return feats

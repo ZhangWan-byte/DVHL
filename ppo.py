@@ -109,14 +109,14 @@ class Args:
 
     # reward func
     reward_func: str = 'human-dm-surrogate'     # use ruiyuan_MLP as surrogate 
-    """decision-making / human-vis / human-dm / human-dm-surrogate"""
+    """decision-making / human-vis / human-dm / human-dm-surrogate / ground-truth"""
 
     # partition-based control
     num_partition: int = 1
     """=1: only 1 partition; >1: default 20"""
 
     # policy network
-    policy_model: str = 'GNN'
+    policy_model: str = 'MLP'
     """GNN / MLP"""
 
     # draw
@@ -666,7 +666,7 @@ def main():
                     print("action: ", hp)
                     alpha, beta, gamma = hp[:, 0], hp[:, 1], hp[:, 2]
 
-                    if args.reward_func != 'human-dm-surrogate':
+                    if args.reward_func != 'human-dm-surrogate' or args.reward_func != 'ground-truth':
                         alpha = {k:alpha[k] for k in range(len(alpha))}
                         alpha = [alpha[i.item()] for i in partition]
 
@@ -782,7 +782,7 @@ def main():
             if min(envs.history_mse[-actual_num_steps:]) < envs.best_mse:
                 torch.save(agent.state_dict(), "./runs/{}/best_mse_agent.pt".format(run_name))
                 envs.best_mse = min(envs.history_mse[-actual_num_steps:])
-        elif args.reward_func == 'human-dm' or args.reward_func == 'human-dm-surrogate':
+        elif args.reward_func in ['human-dm', 'human-dm-surrogate', 'ground-truth']:
             # save agent with BEST episodic accumulative rewards
             if sum(envs.history_rewards[-actual_num_steps:]) > envs.best_reward:
                 torch.save(agent.state_dict(), "./runs/{}/best_rewards_agent.pt".format(run_name))
