@@ -299,8 +299,11 @@ class my_MLP_forward_embed(nn.Module):
 
     def forward(self, state, partition):
 
-        k, m, n = state["n_neighbors"][0], state["MN_ratio"][0], state["FP_ratio"][0]
-        x = torch.tensor([k, m, n, k, m, n]).view(1,-1).float().to(self.device)
+        if type(state) == type({}):
+            k, m, n = state["n_neighbors"][0], state["MN_ratio"][0], state["FP_ratio"][0]
+            x = torch.tensor([k, m, n, k, m, n]).view(1,-1).float().to(self.device)
+        else:
+            x = state        
 
         # print("x: ", x.shape)
 
